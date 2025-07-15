@@ -22,6 +22,18 @@ class LayerRouter(nInputs: Int, nOutputs: Int, outputSize : Int, bitwidth: Int) 
     // we can probably handle this somehow with multi-dimensionalvec
 
 
+
+    // we store the data in a buffer do each stage takes a single cycle
+    // maybe we could change this so it is only at some layers? 
+    val buffer = RegInit(VecInit(Seq.fill(nInputs)(0.U(bitwidth.W))))
+    for (i <- 0 until nInputs)
+    {
+        buffer(i) := io.inputs(i)
+    }
+
+
+
+
     for (i <- 0 until nOutputs) {
         for (j <- 0 until outputSize) {
             io.outputs(i)(j) := 0.U
@@ -33,7 +45,7 @@ class LayerRouter(nInputs: Int, nOutputs: Int, outputSize : Int, bitwidth: Int) 
         val sel_output = io.routing(i)
         val current_index = index(i)(sel_output)
         assert(current_index < outputSize.U)
-        io.outputs(sel_output)(current_index) := io.inputs(i)
+        io.outputs(sel_output)(current_index) := buffer(i)//io.inputs(i)
         index(i+1)(sel_output) := index(i)(sel_output) + 1.U
     }
 }
