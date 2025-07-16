@@ -1,5 +1,4 @@
-package freechips.rocketchip.subsystem.`RME-Firesim`
-
+package agu
 
 
 import chisel3._
@@ -30,6 +29,8 @@ case class AGUParams
     nAdd : Int,
     nMult : Int,
     nPassthru : Int,
+    nLoopRegs : Int,
+    nConstRegs : Int,
     regAddress : Int,
     controlBeatBytes : Int
 )
@@ -52,7 +53,11 @@ class AGUTop(params : AGUParams)(implicit p: Parameters) extends LazyModule
     class Impl extends LazyModuleImp(this) {
         val totalFuncUnits = params.nAdd+params.nMult+params.nPassthru
         val io = IO(new Bundle {
+            val doGen = Flipped(Decoupled(Bool()))
             val offset = Decoupled(Output(UInt(32.W))) // output offset calculation
+
+            // config out to datapath
+
         })
 
         /*
@@ -60,7 +65,11 @@ class AGUTop(params : AGUParams)(implicit p: Parameters) extends LazyModule
         */
         val nOutStatements = RegInit(0.U(log2Ceil(params.maxOutStatements).W))
         val usedOutStatements = RegInit(0.U(log2Ceil(params.maxOutStatements).W))
+        val config_reset = RegInit(Bool())
         
+
+
+
         /* 
             Routing configuration
         
@@ -72,19 +81,32 @@ class AGUTop(params : AGUParams)(implicit p: Parameters) extends LazyModule
                                             VecInit(Seq.fill(totalFuncUnits)(0.U(8.W))))))))
 
 
+        
+
+
+
+        /*
+            Creating MMIO config
+        */
         var cell = 0
         val mmregBuf = ArrayBuffer[(Int, Seq[RegField])]()
         for (i <- 0 until params.maxOutStatements) {
             for (j <- 0 until params.nLayers) {
                 for (k <- 0 until totalFuncUnits) {
-                mmregBuf += (cell -> Seq(RegField(8, RoutingConfig(i)(j)(k), RegFieldDesc("enableRME", "enableRME"))))
+                mmregBuf += (cell -> Seq(RegField(8, RoutingConfig(i)(j)(k), RegFieldDesc("agurouting", "agurouting"))))
                 cell += 1
                 }
             }
         }
-
+        val reg_reset = ((0xf00) -> Seq(RegField(1, config_reset, RegFieldDesc("reset", "reset"))))
         val mmreg: Seq[(Int, Seq[RegField])] = mmregBuf.toSeq
         ctlnode.regmap(mmreg: _*)
+
+
+
+
+
+
 
         /*
             Control Plane
@@ -111,5 +133,29 @@ class AGUTop(params : AGUParams)(implicit p: Parameters) extends LazyModule
         {
             RoutingConfigOut(i) := RoutingConfig(outStatementAtLayer(i))(i)
         }
+
+
+        when (config_reset)
+        {
+            // zero all routing config
+            RoutingConfig.foreach(i => i.foreach(j => j.foreach(k => k := 0.U)))          
+
+            
+            // invalidate all layers
+            validAtLayer.foreach(f => f := false.B)    
+        }
+
+
+        val dpath = Module(new AGUDatapath(params.nLoopRegs, params.nConstRegs, params.nLayers, params.nMult, params.nAdd, params.nPassthru))
+
+
+        dpath.io.doGen := io.doGen.fire
+
+        // give each layer its routing instructions
+        dpath.io.RoutingConfigIn.zipWithIndex.foreach { case (layer, i) =>
+            layer := RoutingConfigOut(i)
+        }
+
     }
+
 }

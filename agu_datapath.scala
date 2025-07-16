@@ -5,13 +5,15 @@ import chisel3.stage.{ChiselStage, ChiselGeneratorAnnotation}
 import chisel3.util._
 import firrtl.options.TargetDirAnnotation
 
-class AGU(nLoopRegs : Int, nConstRegs: Int, nLayers: Int, nMultUnits: Int, nAddUnits: Int, nPassthru: Int) extends Module
+class AGUDatapath(nLoopRegs : Int, nConstRegs: Int, nLayers: Int, nMultUnits: Int, nAddUnits: Int, nPassthru: Int) extends Module
 {
     val bitwidth = 32
-
+    val totalFuncUnits = nAddUnits + nMultUnits + nPassthru
     val io = IO(new Bundle{
       val doGen = Input(Bool())
       val output = Output(UInt(bitwidth.W))
+      val reset = Input(Bool())
+      val RoutingConfigIn = Input(Vec(nLayers, Vec(totalFuncUnits, UInt(8.W))))
     })
 
     /*
@@ -28,7 +30,7 @@ class AGU(nLoopRegs : Int, nConstRegs: Int, nLayers: Int, nMultUnits: Int, nAddU
 
     val AddLayers = VecInit(Seq.fill(nLayers)(
         VecInit(Seq.fill(nAddUnits)(
-            Module(new AddUnit(nAddUnits, 4)).io
+            Module(new AddUnit(nAddUnits, 2)).io
         ))
     ))
 
@@ -40,7 +42,7 @@ class AGU(nLoopRegs : Int, nConstRegs: Int, nLayers: Int, nMultUnits: Int, nAddU
 
 
     val PassThru = Wire(VecInit(Seq.fill(nLayers)(VecInit(Seq.fill(nPassthru)(0.U(bitwidth.W))))))
-    val routing = VecInit(Seq.fill(nLayers+1)(
+    val routing = VecInit(Seq.fill(nLayers)(
         Module(new LayerRouter(nAddUnits + nMultUnits + nPassthru, nAddUnits + nMultUnits + nPassthru, 4, 32)).io
     ))
 
@@ -53,16 +55,26 @@ class AGU(nLoopRegs : Int, nConstRegs: Int, nLayers: Int, nMultUnits: Int, nAddU
         LoopRegs(0) := Mux(LoopRegs(0) === LoopIncRegs(0), 0.U, LoopRegs(0)+1.U)
         for (i <- 1 until nLoopRegs)
         {
-            LoopRegs(i) := Mux(LoopRegs(i-1) === LoopIncRegs(i-1), Mux(LoopRegs(i) === LoopIncRegs(i), 0.U, LoopRegs(i)+1.U), LoopRegs(i))
+            LoopRegs(i) := Mux(LoopRegs(i-1) + 1.U === LoopIncRegs(i-1), Mux(LoopRegs(i) + 1.U === LoopIncRegs(i), 0.U, LoopRegs(i)+1.U), LoopRegs(i))
         }
+    }
+
+    when (io.reset)
+    {
+        LoopRegs.foreach(r => r := 0.U)
+        LoopIncRegs.foreach(r => r := 0.U)
+        ConstantRegs.foreach(r => r := 0.U)
     }
 
 
     /*
         Map control to routers
-
-        dummy method for now
     */
+    routing.zipWithIndex.foreach { case (router, i) => 
+        router.routing := io.RoutingConfigIn(i)    
+        
+    }
+
     for (i <- 0 until nLayers+1)
     {
         for (j <- 0 until nAddUnits + nMultUnits)
@@ -92,7 +104,7 @@ class AGU(nLoopRegs : Int, nConstRegs: Int, nLayers: Int, nMultUnits: Int, nAddU
     {
         for (j <- 0 until nAddUnits)
         {
-            for (x <- 0 until 4) // we currently only support 2
+            for (x <- 0 until 2) // we currently only support 2, not sure if we would see benefit with more
             {
                 AddLayers(i)(j).input(x) := routing(i).outputs(j)(x)
             }
@@ -127,13 +139,6 @@ class AGU(nLoopRegs : Int, nConstRegs: Int, nLayers: Int, nMultUnits: Int, nAddU
     }
     
 
-    io.output := routing(nLayers).outputs(0)(0)
+    io.output := routing(nLayers).outputs(nAddUnits+nMultUnits)(0) // output will always come from last pass thru --> some inefficiency here
 }
 
-
-object Elaborate extends App {
-  (new ChiselStage).execute(
-    args,
-    Seq(ChiselGeneratorAnnotation(() => new AGU(4, 4, 2, 4, 4, 4)),TargetDirAnnotation("build") // Optional: output directory)
-  ))
-}
