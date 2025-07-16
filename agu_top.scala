@@ -109,7 +109,7 @@ class AGUTop(params : AGUParams)(implicit p: Parameters) extends LazyModule
 
 
         /*
-            Control Plane
+            [Control Plane]
         */
         val currentOutStatement = RegInit(0.U(log2Ceil(params.maxOutStatements))) // which out statement do we send down the pipeline
         val readyNewGen = Wire(Bool()) // will we send a new outstatement down the pipeline
@@ -147,11 +147,33 @@ class AGUTop(params : AGUParams)(implicit p: Parameters) extends LazyModule
 
 
         val dpath = Module(new AGUDatapath(params.nLoopRegs, params.nConstRegs, params.nLayers, params.nMult, params.nAdd, params.nPassthru))
-
+        
 
         dpath.io.doGen := io.doGen.fire
 
-        // give each layer its routing instructions
+
+
+        /*
+            [LAYER STALL CONTROL]
+        */
+        val stallLayers = Wire(Vec(params.nLayers, Bool()))
+        /* 
+            Stall last layer if there is valid data there and we do not fire it out
+        */
+        stallLayers(stallLayers.length-1) := (!io.offset.fire && validAtLayer(validAtLayer.length-1)) // stall last layer 
+        for (i <- (stallLayers.length-2) until 0 by -1)
+        {
+            stallLayers(i) := stallLayers(i+1) && validAtLayer(i)
+        }
+        dpath.io.StallLayer := stallLayers
+        io.doGen.ready := !stallLayers(0) // accept new request if we are not stalled at layer 0
+
+
+
+
+        /*
+            [MAP ROUTING CONFIG TO EACH LAYER]
+        */
         dpath.io.RoutingConfigIn.zipWithIndex.foreach { case (layer, i) =>
             layer := RoutingConfigOut(i)
         }

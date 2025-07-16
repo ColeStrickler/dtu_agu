@@ -16,6 +16,7 @@ class LayerRouter(nInputs: Int, nOutputs: Int, outputSize : Int, bitwidth: Int) 
         val inputs = Input(Vec(nInputs, UInt(bitwidth.W)))
         val outputs = Output(Vec(nOutputs, Vec(outputSize, UInt(bitwidth.W))))
         val routing = Input(Vec(nInputs, UInt(log2Ceil(nOutputs).W))) // we need to map multiple inputs to each output
+        val stall = Input(Bool())
     })
 
     val index = VecInit(Seq.fill(nInputs+1)(VecInit(Seq.fill(nOutputs)(0.U((log2Ceil(outputSize)).W)))))
@@ -29,6 +30,15 @@ class LayerRouter(nInputs: Int, nOutputs: Int, outputSize : Int, bitwidth: Int) 
     for (i <- 0 until nInputs)
     {
         buffer(i) := io.inputs(i)
+    }
+
+
+    when (io.stall)
+    {
+        for (i <- 0 until nInputs)
+        {
+            buffer(i) := buffer(i)
+        }
     }
 
 

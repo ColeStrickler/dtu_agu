@@ -14,6 +14,7 @@ class AGUDatapath(nLoopRegs : Int, nConstRegs: Int, nLayers: Int, nMultUnits: In
       val output = Output(UInt(bitwidth.W))
       val reset = Input(Bool())
       val RoutingConfigIn = Input(Vec(nLayers, Vec(totalFuncUnits, UInt(8.W))))
+      val StallLayer = Input(Vec(nLayers, Bool()))
     })
 
     /*
@@ -72,7 +73,7 @@ class AGUDatapath(nLoopRegs : Int, nConstRegs: Int, nLayers: Int, nMultUnits: In
     */
     routing.zipWithIndex.foreach { case (router, i) => 
         router.routing := io.RoutingConfigIn(i)    
-        
+        router.stall := io.StallLayer(i)
     }
 
     for (i <- 0 until nLayers+1)
