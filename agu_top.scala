@@ -24,15 +24,15 @@ import scala.collection.mutable.ArrayBuffer
 
 case class AGUParams
 (
-    maxOutStatements: Int,
-    nLayers: Int,
-    nAdd : Int,
-    nMult : Int,
-    nPassthru : Int,
-    nLoopRegs : Int,
-    nConstRegs : Int,
-    regAddress : Int,
-    controlBeatBytes : Int
+    maxOutStatements: Int = 8,
+    nLayers: Int = 5,
+    nAdd : Int = 4,
+    nMult : Int = 4,
+    nPassthru : Int = 4,
+    nLoopRegs : Int = 6,
+    nConstRegs : Int = 6,
+    regAddress : Int = 0x4000000,
+    controlBeatBytes : Int = 8
 )
 
 
