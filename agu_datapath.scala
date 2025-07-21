@@ -10,19 +10,29 @@ class AGUDatapath(nLoopRegs : Int, nConstRegs: Int, nLayers: Int, nMultUnits: In
     val bitwidth = 32
     val totalFuncUnits = nAddUnits + nMultUnits + nPassthru
     val io = IO(new Bundle{
-      val doGen = Input(Bool())
-      val output = Output(UInt(bitwidth.W))
-      val reset = Input(Bool())
-      val RoutingConfigIn = Input(Vec(nLayers, Vec(totalFuncUnits, UInt(8.W))))
-      val StallLayer = Input(Vec(nLayers, Bool()))
+        val doGen = Input(Bool())
+        val output = Output(UInt(bitwidth.W))
+        val reset = Input(Bool())
+        val RoutingConfigIn = Input(Vec(nLayers+1, Vec(totalFuncUnits, UInt(8.W))))
+        val StallLayer = Input(Vec(nLayers+1, Bool()))
+
+
+
+        val LoopRegsIn =        Input(Vec(nLoopRegs, UInt(bitwidth.W)))
+        val LoopIncRegsIn =     Input(Vec(nLoopRegs, UInt(bitwidth.W)))
+        val ConstantRegsIn =    Input(Vec(nConstRegs, UInt(bitwidth.W)))
     })
 
     /*
         We will need to have these compiled for us from source. We can maintain an invariant like we were in the processor model
     */
-    val LoopRegs = Seq.fill(nLoopRegs)(RegInit(0.U(bitwidth.W)))
-    val LoopIncRegs = Seq.fill(nLoopRegs)(RegInit(0.U(bitwidth.W)))
-    val ConstantRegs = Seq.fill(nConstRegs)(RegInit(0.U(bitwidth.W)))
+    val LoopRegs = Wire(Vec(nLoopRegs, UInt(bitwidth.W)))
+    val LoopIncRegs = Wire(Vec(nLoopRegs, UInt(bitwidth.W)))
+    val ConstantRegs = Wire(Vec(nConstRegs, UInt(bitwidth.W)))
+    LoopRegs := io.LoopRegsIn
+    LoopIncRegs := io.LoopIncRegsIn
+    ConstantRegs := io.ConstantRegsIn
+
 
 
     /*
@@ -42,8 +52,8 @@ class AGUDatapath(nLoopRegs : Int, nConstRegs: Int, nLayers: Int, nMultUnits: In
     ))
 
 
-    val PassThru = Wire(VecInit(Seq.fill(nLayers)(VecInit(Seq.fill(nPassthru)(0.U(bitwidth.W))))))
-    val routing = VecInit(Seq.fill(nLayers)(
+    val PassThru = WireInit(VecInit(Seq.fill(nLayers)(VecInit(Seq.fill(nPassthru)(0.U(bitwidth.W))))))
+    val routing = VecInit(Seq.fill(nLayers+1)(
         Module(new LayerRouter(nAddUnits + nMultUnits + nPassthru, nAddUnits + nMultUnits + nPassthru, 4, 32)).io
     ))
 
@@ -51,21 +61,7 @@ class AGUDatapath(nLoopRegs : Int, nConstRegs: Int, nLayers: Int, nMultUnits: In
     /*
         Loop registers
     */
-    when (io.doGen)
-    {
-        LoopRegs(0) := Mux(LoopRegs(0) === LoopIncRegs(0), 0.U, LoopRegs(0)+1.U)
-        for (i <- 1 until nLoopRegs)
-        {
-            LoopRegs(i) := Mux(LoopRegs(i-1) + 1.U === LoopIncRegs(i-1), Mux(LoopRegs(i) + 1.U === LoopIncRegs(i), 0.U, LoopRegs(i)+1.U), LoopRegs(i))
-        }
-    }
 
-    when (io.reset)
-    {
-        LoopRegs.foreach(r => r := 0.U)
-        LoopIncRegs.foreach(r => r := 0.U)
-        ConstantRegs.foreach(r => r := 0.U)
-    }
 
 
     /*

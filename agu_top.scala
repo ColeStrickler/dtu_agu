@@ -12,6 +12,8 @@ import freechips.rocketchip
 import midas.targetutils.SynthesizePrintf
 import org.chipsalliance.cde.config.{Parameters, Field, Config}
 import scala.collection.mutable.ArrayBuffer
+import subsystem.rme.RequestorAGUPort
+import mainargs.TokensReader.Constant
 /* 
     In this module we do the following:
 
@@ -28,6 +30,7 @@ case class AGUParams
     nLayers: Int = 5,
     nAdd : Int = 4,
     nMult : Int = 4,
+    bitwidth : Int = 32,
     nPassthru : Int = 4,
     nLoopRegs : Int = 6,
     nConstRegs : Int = 6,
@@ -53,9 +56,7 @@ class AGUTop(params : AGUParams)(implicit p: Parameters) extends LazyModule
     class Impl extends LazyModuleImp(this) {
         val totalFuncUnits = params.nAdd+params.nMult+params.nPassthru
         val io = IO(new Bundle {
-            val doGen = Flipped(Decoupled(Bool()))
-            val offset = Decoupled(Output(UInt(32.W))) // output offset calculation
-
+            val reqIO = Flipped(new RequestorAGUPort)
             // config out to datapath
 
         })
@@ -65,7 +66,7 @@ class AGUTop(params : AGUParams)(implicit p: Parameters) extends LazyModule
         */
         val nOutStatements = RegInit(0.U(log2Ceil(params.maxOutStatements).W))
         val usedOutStatements = RegInit(0.U(log2Ceil(params.maxOutStatements).W))
-        val config_reset = RegInit(Bool())
+        val config_reset = RegInit(false.B)
         
 
 
@@ -77,30 +78,73 @@ class AGUTop(params : AGUParams)(implicit p: Parameters) extends LazyModule
             We allow a byte width each to simplify writing to these "Cells"
         */
         val RoutingConfig = RegInit(VecInit(Seq.fill(params.maxOutStatements)(
-                                        VecInit(Seq.fill(params.nLayers)(
+                                        VecInit(Seq.fill(params.nLayers+1)(
                                             VecInit(Seq.fill(totalFuncUnits)(0.U(8.W))))))))
 
 
+
+        
+
+        
         
 
 
 
         /*
-            Creating MMIO config
+            [Creating MMIO config]
         */
         var cell = 0
+        val bytesPerCell = 1
         val mmregBuf = ArrayBuffer[(Int, Seq[RegField])]()
         for (i <- 0 until params.maxOutStatements) {
             for (j <- 0 until params.nLayers) {
                 for (k <- 0 until totalFuncUnits) {
-                mmregBuf += (cell -> Seq(RegField(8, RoutingConfig(i)(j)(k), RegFieldDesc("agurouting", "agurouting"))))
+                mmregBuf += (cell -> Seq(RegField(bytesPerCell*8, RoutingConfig(i)(j)(k), RegFieldDesc("agurouting", "agurouting"))))
                 cell += 1
                 }
             }
         }
+        
+        val bytesUsedRouting = bytesPerCell*params.maxOutStatements*params.nLayers*totalFuncUnits
         val reg_reset = ((0xf00) -> Seq(RegField(1, config_reset, RegFieldDesc("reset", "reset"))))
+        mmregBuf += reg_reset
+
+
+        val LoopRegs = Seq.fill(params.nLoopRegs)(RegInit(0.U(params.bitwidth.W)))
+        val LoopIncRegs = Seq.fill(params.nLoopRegs)(RegInit(0.U(params.bitwidth.W)))
+        val ConstantRegs = Seq.fill(params.nConstRegs)(RegInit(0.U(params.bitwidth.W)))
+        // we will give each of these 32 bits for now
+
+
+        val bytesPerLoop = params.bitwidth/8
+        val bytesPerConst = params.bitwidth/8
+        val bytesUsedForLoop = bytesPerLoop * params.nLoopRegs 
+        val bytesUsedIncLoop = bytesPerLoop * params.nLoopRegs 
+        val offsetConstRegs = bytesUsedRouting+bytesUsedForLoop+bytesUsedIncLoop
+        assert(offsetConstRegs < 0xf00)
+        for (i <- 0 until params.nLoopRegs) // Loop registers immediately after routing cells
+        {
+            mmregBuf += ((bytesUsedRouting+(i*bytesPerLoop) -> Seq(RegField(bytesPerLoop, LoopRegs(i), RegFieldDesc("forloop", "forloop")))))
+            mmregBuf += ((bytesUsedRouting+bytesUsedForLoop+(i*bytesPerLoop) -> Seq(RegField(bytesPerLoop, LoopIncRegs(i), RegFieldDesc("incloop", "incloop")))))
+        }
+        for (i <- 0 until params.nConstRegs)
+        {
+            mmregBuf += ((offsetConstRegs + i*bytesPerConst) -> Seq(RegField(bytesPerLoop, ConstantRegs(i), RegFieldDesc("constreg", "constreg"))))
+        }
+
         val mmreg: Seq[(Int, Seq[RegField])] = mmregBuf.toSeq
         ctlnode.regmap(mmreg: _*)
+
+        /*
+            [Creating MMIO config] --> END
+        */
+
+
+
+
+
+
+
 
 
 
@@ -113,11 +157,15 @@ class AGUTop(params : AGUParams)(implicit p: Parameters) extends LazyModule
         */
         val currentOutStatement = RegInit(0.U(log2Ceil(params.maxOutStatements))) // which out statement do we send down the pipeline
         val readyNewGen = Wire(Bool()) // will we send a new outstatement down the pipeline
-        val outStatementAtLayer = RegInit(VecInit(Seq.fill(params.nLayers)(0.U(log2Ceil(params.maxOutStatements).W))))
-        val validAtLayer = RegInit(VecInit(Seq.fill(params.nLayers)(false.B)))
+        val outStatementAtLayer = RegInit(VecInit(Seq.fill(params.nLayers+1)(0.U(log2Ceil(params.maxOutStatements).W))))
+        val validAtLayer = RegInit(VecInit(Seq.fill(params.nLayers+1)(false.B)))
+        val stallLayers = Wire(Vec(params.nLayers+1, Bool()))
+        readyNewGen := io.reqIO.doGen.fire && io.reqIO.doGen.bits && !stallLayers(0)
+
+
 
         // shift in valid signal
-        validAtLayer := readyNewGen +: validAtLayer.init
+        validAtLayer := readyNewGen +: validAtLayer.init // we will shift in falses here by definition
         // shift in current outStatement
         outStatementAtLayer := currentOutStatement +: outStatementAtLayer.init
 
@@ -127,9 +175,9 @@ class AGUTop(params : AGUParams)(implicit p: Parameters) extends LazyModule
 
 
         val RoutingConfigOut = Wire(
-            Vec(params.nLayers, Vec(totalFuncUnits, UInt(8.W)))
+            Vec(params.nLayers+1, Vec(totalFuncUnits, UInt(8.W)))
         )
-        for (i <- 0 until params.nLayers)
+        for (i <- 0 until params.nLayers+1)
         {
             RoutingConfigOut(i) := RoutingConfig(outStatementAtLayer(i))(i)
         }
@@ -149,26 +197,54 @@ class AGUTop(params : AGUParams)(implicit p: Parameters) extends LazyModule
         val dpath = Module(new AGUDatapath(params.nLoopRegs, params.nConstRegs, params.nLayers, params.nMult, params.nAdd, params.nPassthru))
         
 
-        dpath.io.doGen := io.doGen.fire
+        dpath.io.doGen := readyNewGen
+        dpath.io.reset := config_reset
+        dpath.io.ConstantRegsIn := ConstantRegs
+        dpath.io.LoopIncRegsIn := LoopIncRegs
+        dpath.io.LoopRegsIn := LoopRegs
+
+
+
+        // update state registers
+        when (readyNewGen)
+        {
+            LoopRegs(0) := Mux(LoopRegs(0) === LoopIncRegs(0), 0.U, LoopRegs(0)+1.U)
+            for (i <- 1 until params.nLoopRegs)
+            {
+                LoopRegs(i) := Mux(LoopRegs(i-1) + 1.U === LoopIncRegs(i-1), Mux(LoopRegs(i) + 1.U === LoopIncRegs(i), 0.U, LoopRegs(i)+1.U), LoopRegs(i))
+            }
+        }
+        when (config_reset)
+        {
+            LoopRegs.foreach(r => r := 0.U)
+            LoopIncRegs.foreach(r => r := 0.U)
+            ConstantRegs.foreach(r => r := 0.U)
+        }
+
+
+
+
 
 
 
         /*
             [LAYER STALL CONTROL]
         */
-        val stallLayers = Wire(Vec(params.nLayers, Bool()))
+        
         /* 
             Stall last layer if there is valid data there and we do not fire it out
         */
-        stallLayers(stallLayers.length-1) := (!io.offset.fire && validAtLayer(validAtLayer.length-1)) // stall last layer 
-        for (i <- (stallLayers.length-2) until 0 by -1)
+        stallLayers(stallLayers.length-1) := (!io.reqIO.offset.ready && validAtLayer(validAtLayer.length-1)) // stall last layer 
+        for (i <- (stallLayers.length-2) to 0 by -1)
         {
             stallLayers(i) := stallLayers(i+1) && validAtLayer(i)
         }
         dpath.io.StallLayer := stallLayers
-        io.doGen.ready := !stallLayers(0) // accept new request if we are not stalled at layer 0
+        io.reqIO.doGen.ready := !stallLayers(0) // accept new request if we are not stalled at layer 0
 
 
+        io.reqIO.offset.valid := validAtLayer(validAtLayer.length-1) && !stallLayers(stallLayers.length-1) 
+        io.reqIO.offset.bits := dpath.io.output
 
 
         /*
