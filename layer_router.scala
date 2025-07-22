@@ -10,12 +10,14 @@ import chisel3.util._
 
 
 
-class LayerRouter(nInputs: Int, nOutputs: Int, outputSize : Int, bitwidth: Int) extends Module 
+class LayerRouter(nInputs: Int, nOutputs: Int, outputSize : Int, bitwidth: Int, maxOutputs: Int) extends Module 
 {
+
+    
     val io = IO(new Bundle{
         val inputs = Input(Vec(nInputs, UInt(bitwidth.W)))
         val outputs = Output(Vec(nOutputs, Vec(outputSize, UInt(bitwidth.W))))
-        val routing = Input(Vec(nInputs, UInt(log2Ceil(nOutputs).W))) // we need to map multiple inputs to each output
+        val routing = Input(Vec(nInputs, Vec(maxOutputs, UInt(log2Ceil(nOutputs).W)))) // we need to map multiple inputs to each output
         val stall = Input(Bool())
     })
 
@@ -31,6 +33,9 @@ class LayerRouter(nInputs: Int, nOutputs: Int, outputSize : Int, bitwidth: Int) 
     {
         buffer(i) := io.inputs(i)
     }
+
+
+    
 
 
     when (io.stall)
@@ -51,11 +56,13 @@ class LayerRouter(nInputs: Int, nOutputs: Int, outputSize : Int, bitwidth: Int) 
     }
     // Route each output from the input specified in routing
     for (i <- 0 until nInputs) {
-
-        val sel_output = io.routing(i)
-        val current_index = index(i)(sel_output)
-        assert(current_index < outputSize.U)
-        io.outputs(sel_output)(current_index) := buffer(i)//io.inputs(i)
-        index(i+1)(sel_output) := index(i)(sel_output) + 1.U
+        for (j <- 0 until maxOutputs)
+        {
+            val sel_output = io.routing(i)(j)
+            val current_index = index(i)(sel_output)
+            assert(current_index < outputSize.U)
+            io.outputs(sel_output)(current_index) := buffer(i)//io.inputs(i)
+            index(i+1)(sel_output) := index(i)(sel_output) + 1.U
+        }      
     }
 }

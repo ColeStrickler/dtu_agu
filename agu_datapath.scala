@@ -4,8 +4,9 @@ import chisel3._
 import chisel3.stage.{ChiselStage, ChiselGeneratorAnnotation}
 import chisel3.util._
 import firrtl.options.TargetDirAnnotation
+import midas.targetutils.SynthesizePrintf
 
-class AGUDatapath(nLoopRegs : Int, nConstRegs: Int, nLayers: Int, nMultUnits: Int, nAddUnits: Int, nPassthru: Int) extends Module
+class AGUDatapath(nLoopRegs : Int, nConstRegs: Int, nLayers: Int, nMultUnits: Int, nAddUnits: Int, nPassthru: Int, maxVarOutputs: Int) extends Module
 {
     val bitwidth = 32
     val totalFuncUnits = nAddUnits + nMultUnits + nPassthru
@@ -13,7 +14,7 @@ class AGUDatapath(nLoopRegs : Int, nConstRegs: Int, nLayers: Int, nMultUnits: In
         val doGen = Input(Bool())
         val output = Output(UInt(bitwidth.W))
         val reset = Input(Bool())
-        val RoutingConfigIn = Input(Vec(nLayers+1, Vec(totalFuncUnits, UInt(8.W))))
+        val RoutingConfigIn = Input(Vec(nLayers+1, Vec(totalFuncUnits, Vec(maxVarOutputs, UInt(8.W)))))
         val StallLayer = Input(Vec(nLayers+1, Bool()))
 
 
@@ -34,27 +35,52 @@ class AGUDatapath(nLoopRegs : Int, nConstRegs: Int, nLayers: Int, nMultUnits: In
     ConstantRegs := io.ConstantRegsIn
 
 
+    when (io.doGen)
+    {
+        for (i <- 0 until nLoopRegs)
+        {
+            SynthesizePrintf("loopreg(%d) %d\n", i.U, LoopRegs(i))
+            SynthesizePrintf("loopincreg(%d) %d\n", i.U, LoopIncRegs(i))
+        }
+
+        for (i <- 0 until nConstRegs)
+        {
+            SynthesizePrintf("constReg(%d) %d\n", i.U, ConstantRegs(i))
+        }
+    }
+
 
     /*
         Initialize Layers
     */
 
-    val AddLayers = VecInit(Seq.fill(nLayers)(
-        VecInit(Seq.fill(nAddUnits)(
-            Module(new AddUnit(nAddUnits, 2)).io
-        ))
-    ))
+    
+    val AddLayers = VecInit(
+        (0 until nLayers).map { layerIdx =>
+            VecInit(
+            (0 until nAddUnits).map { unitIdx =>
+                val addUnit = Module(new AddUnit(nAddUnits, 2, layerIdx)) // pass layerIdx
+                addUnit.io
+            }
+            )
+        }
+    )
 
-    val MultLayers = VecInit(Seq.fill(nLayers)(
-        VecInit(Seq.fill(nMultUnits)(
-            Module(new MultUnit(bitwidth)).io
-        ))
-    ))
+    val MultLayers = VecInit(
+        (0 until nLayers).map { layerIdx =>
+            VecInit(
+            (0 until nMultUnits).map { unitIdx =>
+                val multUnit = Module(new MultUnit(bitwidth, layerIdx)) // pass layerIdx
+                multUnit.io
+            }
+            )
+        }
+    )
 
 
     val PassThru = WireInit(VecInit(Seq.fill(nLayers)(VecInit(Seq.fill(nPassthru)(0.U(bitwidth.W))))))
     val routing = VecInit(Seq.fill(nLayers+1)(
-        Module(new LayerRouter(nAddUnits + nMultUnits + nPassthru, nAddUnits + nMultUnits + nPassthru, 4, 32)).io
+        Module(new LayerRouter(nAddUnits + nMultUnits + nPassthru, nAddUnits + nMultUnits + nPassthru, 2, 32, maxVarOutputs)).io
     ))
 
 
@@ -75,7 +101,11 @@ class AGUDatapath(nLoopRegs : Int, nConstRegs: Int, nLayers: Int, nMultUnits: In
     for (i <- 0 until nLayers+1)
     {
         for (j <- 0 until nAddUnits + nMultUnits)
-            routing(i).routing(j) := j.U
+        {
+            for (k <- 0 until maxVarOutputs)
+                routing(i).routing(j)(k) := j.U
+        }
+            
     }
 
 
@@ -113,10 +143,10 @@ class AGUDatapath(nLoopRegs : Int, nConstRegs: Int, nLayers: Int, nMultUnits: In
         {
             MultLayers(i)(j).inA := routing(i).outputs(j+nAddUnits)(0)
             MultLayers(i)(j).inB := routing(i).outputs(j+nAddUnits)(1)
-            for (x <- 2 until 4)
-            {
-                assert(routing(i).outputs(j)(x) === 0.U)
-            }
+            //for (x <- 2 until 4)
+            //{
+            //    assert(routing(i).outputs(j)(x) === 0.U)
+            //}
 
             routing(i+1).inputs(j+nAddUnits) := MultLayers(i)(j).out
         }
@@ -125,7 +155,7 @@ class AGUDatapath(nLoopRegs : Int, nConstRegs: Int, nLayers: Int, nMultUnits: In
         for (j <- 0 until nPassthru)
         {
             PassThru(i)(j) := routing(i).outputs(j+nAddUnits+nMultUnits)(0)
-            for (x <- 1 until 4)
+            for (x <- 1 until 2)
             {
                 assert(routing(i).outputs(j)(x) === 0.U)
             }

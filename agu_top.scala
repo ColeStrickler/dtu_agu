@@ -35,7 +35,8 @@ case class AGUParams
     nLoopRegs : Int = 6,
     nConstRegs : Int = 6,
     regAddress : Int = 0x4000000,
-    controlBeatBytes : Int = 8
+    controlBeatBytes : Int = 8,
+    maxVarOutputs : Int = 4
 )
 
 
@@ -79,7 +80,7 @@ class AGUTop(params : AGUParams)(implicit p: Parameters) extends LazyModule
         */
         val RoutingConfig = RegInit(VecInit(Seq.fill(params.maxOutStatements)(
                                         VecInit(Seq.fill(params.nLayers+1)(
-                                            VecInit(Seq.fill(totalFuncUnits)(0.U(8.W))))))))
+                                            VecInit(Seq.fill(totalFuncUnits)(VecInit(Seq.fill(params.maxVarOutputs)(0.U(8.W))))))))))
 
 
 
@@ -99,21 +100,42 @@ class AGUTop(params : AGUParams)(implicit p: Parameters) extends LazyModule
         for (i <- 0 until params.maxOutStatements) {
             for (j <- 0 until params.nLayers) {
                 for (k <- 0 until totalFuncUnits) {
-                mmregBuf += (cell -> Seq(RegField(bytesPerCell*8, RoutingConfig(i)(j)(k), RegFieldDesc("agurouting", "agurouting"))))
-                cell += 1
+                    for (l <- 0 until params.maxVarOutputs)
+                    {
+                        mmregBuf += (cell -> Seq(RegField(bytesPerCell*8, RoutingConfig(i)(j)(k)(l), RegFieldDesc("agurouting", "agurouting"))))
+                        cell += 1
+                    }
                 }
             }
         }
         
-        val bytesUsedRouting = bytesPerCell*params.maxOutStatements*params.nLayers*totalFuncUnits
+        val bytesUsedRouting = bytesPerCell*params.maxOutStatements*params.nLayers*totalFuncUnits*params.maxVarOutputs
         val reg_reset = ((0xf00) -> Seq(RegField(1, config_reset, RegFieldDesc("reset", "reset"))))
+        val usedOutStatementsReg = ((0xf01) -> Seq(RegField(8, usedOutStatements, RegFieldDesc("nOutStatements", "nOutStatements"))))
         mmregBuf += reg_reset
+        mmregBuf += usedOutStatementsReg
 
 
         val LoopRegs = Seq.fill(params.nLoopRegs)(RegInit(0.U(params.bitwidth.W)))
         val LoopIncRegs = Seq.fill(params.nLoopRegs)(RegInit(0.U(params.bitwidth.W)))
         val ConstantRegs = Seq.fill(params.nConstRegs)(RegInit(0.U(params.bitwidth.W)))
         // we will give each of these 32 bits for now
+        when (io.reqIO.doGen.fire)
+    {
+        for (i <- 0 until params.nLoopRegs)
+        {
+            SynthesizePrintf("loopreg(%d) %d\n", i.U, LoopRegs(i))
+            SynthesizePrintf("loopincreg(%d) %d\n", i.U, LoopIncRegs(i))
+        }
+
+        for (i <- 0 until params.nConstRegs)
+        {
+            SynthesizePrintf("constReg(%d) %d\n", i.U, ConstantRegs(i))
+        }
+    }
+
+
+
 
 
         val bytesPerLoop = params.bitwidth/8
@@ -124,15 +146,19 @@ class AGUTop(params : AGUParams)(implicit p: Parameters) extends LazyModule
         assert(offsetConstRegs < 0xf00)
         for (i <- 0 until params.nLoopRegs) // Loop registers immediately after routing cells
         {
-            mmregBuf += ((bytesUsedRouting+(i*bytesPerLoop) -> Seq(RegField(bytesPerLoop, LoopRegs(i), RegFieldDesc("forloop", "forloop")))))
-            mmregBuf += ((bytesUsedRouting+bytesUsedForLoop+(i*bytesPerLoop) -> Seq(RegField(bytesPerLoop, LoopIncRegs(i), RegFieldDesc("incloop", "incloop")))))
+            mmregBuf += ((bytesUsedRouting+(i*bytesPerLoop) -> Seq(RegField(params.bitwidth, LoopRegs(i), RegFieldDesc("forloop", "forloop")))))
+            mmregBuf += ((bytesUsedRouting+bytesUsedForLoop+(i*bytesPerLoop) -> Seq(RegField(params.bitwidth, LoopIncRegs(i), RegFieldDesc("incloop", "incloop")))))
         }
         for (i <- 0 until params.nConstRegs)
         {
-            mmregBuf += ((offsetConstRegs + i*bytesPerConst) -> Seq(RegField(bytesPerLoop, ConstantRegs(i), RegFieldDesc("constreg", "constreg"))))
+            mmregBuf += ((offsetConstRegs + i*bytesPerConst) -> Seq(RegField(params.bitwidth, ConstantRegs(i), RegFieldDesc("constreg", "constreg"))))
         }
 
         val mmreg: Seq[(Int, Seq[RegField])] = mmregBuf.toSeq
+        mmregBuf.foreach { case (addr, fields) =>
+            println(f"MMIO reg @ 0x$addr%x : ${fields.map(_.desc.get.name).mkString(", ")}")
+        }
+
         ctlnode.regmap(mmreg: _*)
 
         /*
@@ -175,7 +201,7 @@ class AGUTop(params : AGUParams)(implicit p: Parameters) extends LazyModule
 
 
         val RoutingConfigOut = Wire(
-            Vec(params.nLayers+1, Vec(totalFuncUnits, UInt(8.W)))
+            Vec(params.nLayers+1, Vec(totalFuncUnits, Vec(params.maxVarOutputs, UInt(8.W))))
         )
         for (i <- 0 until params.nLayers+1)
         {
@@ -185,8 +211,9 @@ class AGUTop(params : AGUParams)(implicit p: Parameters) extends LazyModule
 
         when (config_reset)
         {
+            SynthesizePrintf("configReset=true\n")
             // zero all routing config
-            RoutingConfig.foreach(i => i.foreach(j => j.foreach(k => k := 0.U)))          
+            RoutingConfig.foreach(i => i.foreach(j => j.foreach(k => k.foreach(l => l := 0.U))))          
 
             
             // invalidate all layers
@@ -194,7 +221,7 @@ class AGUTop(params : AGUParams)(implicit p: Parameters) extends LazyModule
         }
 
 
-        val dpath = Module(new AGUDatapath(params.nLoopRegs, params.nConstRegs, params.nLayers, params.nMult, params.nAdd, params.nPassthru))
+        val dpath = Module(new AGUDatapath(params.nLoopRegs, params.nConstRegs, params.nLayers, params.nMult, params.nAdd, params.nPassthru, params.maxVarOutputs))
         
 
         dpath.io.doGen := readyNewGen
