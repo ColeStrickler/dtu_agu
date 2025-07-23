@@ -77,11 +77,14 @@ class AGUTop(params : AGUParams)(implicit p: Parameters) extends LazyModule
         
         
             We allow a byte width each to simplify writing to these "Cells"
+
+
+            Initialize to 255 so they are ignored by router
         */
         val RoutingConfig = RegInit(VecInit(Seq.fill(params.maxOutStatements)(
                                         VecInit(Seq.fill(params.nLayers+1)(
-                                            VecInit(Seq.fill(totalFuncUnits)(VecInit(Seq.fill(params.maxVarOutputs)(0.U(8.W))))))))))
-
+                                            VecInit(Seq.fill(totalFuncUnits)(VecInit(Seq.fill(params.maxVarOutputs)(255.U(8.W))))))))))
+        
 
 
         
@@ -98,7 +101,7 @@ class AGUTop(params : AGUParams)(implicit p: Parameters) extends LazyModule
         val bytesPerCell = 1
         val mmregBuf = ArrayBuffer[(Int, Seq[RegField])]()
         for (i <- 0 until params.maxOutStatements) {
-            for (j <- 0 until params.nLayers) {
+            for (j <- 0 until params.nLayers+1) {
                 for (k <- 0 until totalFuncUnits) {
                     for (l <- 0 until params.maxVarOutputs)
                     {
@@ -109,7 +112,7 @@ class AGUTop(params : AGUParams)(implicit p: Parameters) extends LazyModule
             }
         }
         
-        val bytesUsedRouting = bytesPerCell*params.maxOutStatements*params.nLayers*totalFuncUnits*params.maxVarOutputs
+        val bytesUsedRouting = bytesPerCell*params.maxOutStatements*(params.nLayers+1)*totalFuncUnits*params.maxVarOutputs
         val reg_reset = ((0xf00) -> Seq(RegField(1, config_reset, RegFieldDesc("reset", "reset"))))
         val usedOutStatementsReg = ((0xf01) -> Seq(RegField(8, usedOutStatements, RegFieldDesc("nOutStatements", "nOutStatements"))))
         mmregBuf += reg_reset
@@ -206,6 +209,16 @@ class AGUTop(params : AGUParams)(implicit p: Parameters) extends LazyModule
         for (i <- 0 until params.nLayers+1)
         {
             RoutingConfigOut(i) := RoutingConfig(outStatementAtLayer(i))(i)
+            when (io.reqIO.doGen.fire)
+            {
+                for (x <- 0 until (totalFuncUnits)) {
+                    for (y <- 0 until params.maxVarOutputs) {
+                        SynthesizePrintf("[AGUTop] Layer %d Routing input %d, output index %d: %d\n", i.U, x.U, y.U, RoutingConfigOut(i)(x)(y))
+                    }
+                }
+                SynthesizePrintf("routingconfigout(%d) %d\n", i.U, RoutingConfigOut(i).asUInt)
+            }
+            
         }
 
 
@@ -213,7 +226,7 @@ class AGUTop(params : AGUParams)(implicit p: Parameters) extends LazyModule
         {
             SynthesizePrintf("configReset=true\n")
             // zero all routing config
-            RoutingConfig.foreach(i => i.foreach(j => j.foreach(k => k.foreach(l => l := 0.U))))          
+            RoutingConfig.foreach(i => i.foreach(j => j.foreach(k => k.foreach(l => l := 255.U))))// ignore value
 
             
             // invalidate all layers
@@ -235,7 +248,7 @@ class AGUTop(params : AGUParams)(implicit p: Parameters) extends LazyModule
         // update state registers
         when (readyNewGen)
         {
-            LoopRegs(0) := Mux(LoopRegs(0) === LoopIncRegs(0), 0.U, LoopRegs(0)+1.U)
+            LoopRegs(0) := Mux(LoopRegs(0) === LoopIncRegs(0) - 1.U, 0.U, LoopRegs(0)+1.U)
             for (i <- 1 until params.nLoopRegs)
             {
                 LoopRegs(i) := Mux(LoopRegs(i-1) + 1.U === LoopIncRegs(i-1), Mux(LoopRegs(i) + 1.U === LoopIncRegs(i), 0.U, LoopRegs(i)+1.U), LoopRegs(i))

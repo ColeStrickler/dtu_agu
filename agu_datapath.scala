@@ -79,15 +79,13 @@ class AGUDatapath(nLoopRegs : Int, nConstRegs: Int, nLayers: Int, nMultUnits: In
 
 
     val PassThru = WireInit(VecInit(Seq.fill(nLayers)(VecInit(Seq.fill(nPassthru)(0.U(bitwidth.W))))))
-    val routing = VecInit(Seq.fill(nLayers+1)(
-        Module(new LayerRouter(nAddUnits + nMultUnits + nPassthru, nAddUnits + nMultUnits + nPassthru, 2, 32, maxVarOutputs)).io
-    ))
-
-
-    /*
-        Loop registers
-    */
-
+    val routing = VecInit(
+        (0 to nLayers).map { layerIdx =>
+            val nUnits = nAddUnits + nMultUnits + nPassthru
+            val router = Module(new LayerRouter(nUnits, nUnits, 2, 32, maxVarOutputs, layerIdx)) // you can pass layerIdx if needed
+            router.io
+        }
+    )
 
 
     /*
@@ -98,29 +96,24 @@ class AGUDatapath(nLoopRegs : Int, nConstRegs: Int, nLayers: Int, nMultUnits: In
         router.stall := io.StallLayer(i)
     }
 
-    for (i <- 0 until nLayers+1)
-    {
-        for (j <- 0 until nAddUnits + nMultUnits)
-        {
-            for (k <- 0 until maxVarOutputs)
-                routing(i).routing(j)(k) := j.U
-        }
-            
-    }
 
 
     /*
-        Put loop and constant registers into router     
-    */
-    for (i <- 0 until nLoopRegs)
-    {
-        routing(0).inputs(i) := LoopRegs(i)
-    }
+        Put loop and constant registers into router 
 
+
+        We flipped the indexes?
+    */
     for (i <- 0 until nConstRegs)
     {
-        routing(0).inputs(i+nLoopRegs) := ConstantRegs(i)
+        routing(0).inputs(i) := ConstantRegs(i)
     }
+    for (i <- 0 until nLoopRegs)
+    {
+        routing(0).inputs(i + nConstRegs) := LoopRegs(i)
+    }
+
+    
 
 
 

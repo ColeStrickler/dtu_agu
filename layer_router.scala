@@ -3,6 +3,7 @@ package agu
 import chisel3._
 import chisel3.stage.{ChiselStage, ChiselGeneratorAnnotation}
 import chisel3.util._
+import midas.targetutils.SynthesizePrintf
 
 
 
@@ -10,14 +11,14 @@ import chisel3.util._
 
 
 
-class LayerRouter(nInputs: Int, nOutputs: Int, outputSize : Int, bitwidth: Int, maxOutputs: Int) extends Module 
+class LayerRouter(nInputs: Int, nOutputs: Int, outputSize : Int, bitwidth: Int, maxOutputs: Int, layer: Int) extends Module 
 {
 
     
     val io = IO(new Bundle{
         val inputs = Input(Vec(nInputs, UInt(bitwidth.W)))
         val outputs = Output(Vec(nOutputs, Vec(outputSize, UInt(bitwidth.W))))
-        val routing = Input(Vec(nInputs, Vec(maxOutputs, UInt(log2Ceil(nOutputs).W)))) // we need to map multiple inputs to each output
+        val routing = Input(Vec(nInputs, Vec(maxOutputs, UInt(8.W)))) // we need to map multiple inputs to each output
         val stall = Input(Bool())
     })
 
@@ -59,10 +60,16 @@ class LayerRouter(nInputs: Int, nOutputs: Int, outputSize : Int, bitwidth: Int, 
         for (j <- 0 until maxOutputs)
         {
             val sel_output = io.routing(i)(j)
-            val current_index = index(i)(sel_output)
-            assert(current_index < outputSize.U)
-            io.outputs(sel_output)(current_index) := buffer(i)//io.inputs(i)
-            index(i+1)(sel_output) := index(i)(sel_output) + 1.U
+            when (sel_output =/= 255.U) // this is 
+            {
+                val current_index = index(i)(sel_output)
+                assert(current_index < outputSize.U)
+                SynthesizePrintf("[Layer%d] input%d (%d) -> output(%d)\n", layer.U, i.U, buffer(i), sel_output)
+
+                io.outputs(sel_output)(current_index) := buffer(i)//io.inputs(i)
+                index(i+1)(sel_output) := index(i)(sel_output) + 1.U
+            }
+            
         }      
     }
 }
