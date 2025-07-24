@@ -23,6 +23,11 @@ import mainargs.TokensReader.Constant
 
 */
 
+object Constants {
+  final val NULL_ROUTE = 255
+}
+
+
 
 case class AGUParams
 (
@@ -83,7 +88,7 @@ class AGUTop(params : AGUParams)(implicit p: Parameters) extends LazyModule
         */
         val RoutingConfig = RegInit(VecInit(Seq.fill(params.maxOutStatements)(
                                         VecInit(Seq.fill(params.nLayers+1)(
-                                            VecInit(Seq.fill(totalFuncUnits)(VecInit(Seq.fill(params.maxVarOutputs)(255.U(8.W))))))))))
+                                            VecInit(Seq.fill(totalFuncUnits)(VecInit(Seq.fill(params.maxVarOutputs)(Constants.NULL_ROUTE.U(8.W))))))))))
         
 
 
@@ -226,7 +231,7 @@ class AGUTop(params : AGUParams)(implicit p: Parameters) extends LazyModule
         {
             SynthesizePrintf("configReset=true\n")
             // zero all routing config
-            RoutingConfig.foreach(i => i.foreach(j => j.foreach(k => k.foreach(l => l := 255.U))))// ignore value
+            RoutingConfig.foreach(i => i.foreach(j => j.foreach(k => k.foreach(l => l := Constants.NULL_ROUTE.U))))// ignore value
 
             
             // invalidate all layers

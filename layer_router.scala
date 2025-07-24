@@ -9,8 +9,6 @@ import midas.targetutils.SynthesizePrintf
 
 
 
-
-
 class LayerRouter(nInputs: Int, nOutputs: Int, outputSize : Int, bitwidth: Int, maxOutputs: Int, layer: Int) extends Module 
 {
 
@@ -57,19 +55,24 @@ class LayerRouter(nInputs: Int, nOutputs: Int, outputSize : Int, bitwidth: Int, 
     }
     // Route each output from the input specified in routing
     for (i <- 0 until nInputs) {
+        
+        for (x <- 0 until nOutputs) // default just pass ahead
+        {
+            index(i+1)(x) := index(i)(x)
+        }
+
         for (j <- 0 until maxOutputs)
         {
             val sel_output = io.routing(i)(j)
-            when (sel_output =/= 255.U) // this is 
+            when (sel_output =/= Constants.NULL_ROUTE.U) // this is default value
             {
                 val current_index = index(i)(sel_output)
                 assert(current_index < outputSize.U)
-                SynthesizePrintf("[Layer%d] input%d (%d) -> output(%d)\n", layer.U, i.U, buffer(i), sel_output)
+                SynthesizePrintf("[Layer%d] input%d (%d) -> output(%d) stall=%d index %d\n", layer.U, i.U, buffer(i), sel_output, io.stall, index(i)(sel_output))
 
                 io.outputs(sel_output)(current_index) := buffer(i)//io.inputs(i)
                 index(i+1)(sel_output) := index(i)(sel_output) + 1.U
             }
-            
         }      
     }
 }

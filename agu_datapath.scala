@@ -59,7 +59,7 @@ class AGUDatapath(nLoopRegs : Int, nConstRegs: Int, nLayers: Int, nMultUnits: In
         (0 until nLayers).map { layerIdx =>
             VecInit(
             (0 until nAddUnits).map { unitIdx =>
-                val addUnit = Module(new AddUnit(nAddUnits, 2, layerIdx)) // pass layerIdx
+                val addUnit = Module(new AddUnit(bitwidth, 2, layerIdx)) // pass layerIdx
                 addUnit.io
             }
             )
@@ -124,11 +124,10 @@ class AGUDatapath(nLoopRegs : Int, nConstRegs: Int, nLayers: Int, nMultUnits: In
     {
         for (j <- 0 until nAddUnits)
         {
-            for (x <- 0 until 2) // we currently only support 2, not sure if we would see benefit with more
-            {
-                AddLayers(i)(j).input(x) := routing(i).outputs(j)(x)
-            }
-
+            SynthesizePrintf("layer%d addUnit%d <-- input %d\n", i.U, j.U, routing(i).outputs(j)(0))
+            SynthesizePrintf("layer%d addUnit%d <-- input %d\n", i.U, j.U, routing(i).outputs(j)(1))
+            AddLayers(i)(j).inA := routing(i).outputs(j)(0)
+            AddLayers(i)(j).inB := routing(i).outputs(j)(1)
             routing(i+1).inputs(j) := AddLayers(i)(j).output
         }
 
@@ -148,10 +147,10 @@ class AGUDatapath(nLoopRegs : Int, nConstRegs: Int, nLayers: Int, nMultUnits: In
         for (j <- 0 until nPassthru)
         {
             PassThru(i)(j) := routing(i).outputs(j+nAddUnits+nMultUnits)(0)
-            for (x <- 1 until 2)
-            {
-                assert(routing(i).outputs(j)(x) === 0.U)
-            }
+            //for (x <- 1 until 2)
+            //{
+            //    assert(routing(i).outputs(j)(x) === 0.U)
+            //}
             routing(i+1).inputs(j+nAddUnits+nMultUnits) := PassThru(i)(j)
 
         }
