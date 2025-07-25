@@ -251,12 +251,15 @@ class AGUTop(params : AGUParams)(implicit p: Parameters) extends LazyModule
 
 
         // update state registers
+        val isIncLoopReg =  Seq.fill(params.nLoopRegs)(WireInit(false.B))
+        isIncLoopReg(0) := readyNewGen
         when (readyNewGen)
         {
             LoopRegs(0) := Mux(LoopRegs(0) === LoopIncRegs(0) - 1.U, 0.U, LoopRegs(0)+1.U)
             for (i <- 1 until params.nLoopRegs)
             {
-                LoopRegs(i) := Mux(LoopRegs(i-1) + 1.U === LoopIncRegs(i-1), Mux(LoopRegs(i) + 1.U === LoopIncRegs(i), 0.U, LoopRegs(i)+1.U), LoopRegs(i))
+                isIncLoopReg(i) := isIncLoopReg(i-1) && (LoopRegs(i-1) + 1.U === LoopIncRegs(i-1))
+                LoopRegs(i) := Mux(isIncLoopReg(i), Mux(LoopRegs(i) + 1.U === LoopIncRegs(i), 0.U, LoopRegs(i)+1.U), LoopRegs(i))
             }
         }
         when (config_reset)

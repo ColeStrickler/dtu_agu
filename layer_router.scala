@@ -68,7 +68,7 @@ class LayerRouter(nInputs: Int, nOutputs: Int, outputSize : Int, bitwidth: Int, 
             {
                 val current_index = index(i)(sel_output)
                 assert(current_index < outputSize.U)
-                SynthesizePrintf("[Layer%d] input%d (%d) -> output(%d) stall=%d index %d\n", layer.U, i.U, buffer(i), sel_output, io.stall, index(i)(sel_output))
+                //SynthesizePrintf("[Layer%d] input%d (%d) -> output(%d) stall=%d index %d\n", layer.U, i.U, buffer(i), sel_output, io.stall, index(i)(sel_output))
 
                 io.outputs(sel_output)(current_index) := buffer(i)//io.inputs(i)
                 index(i+1)(sel_output) := index(i)(sel_output) + 1.U
