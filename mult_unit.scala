@@ -20,7 +20,7 @@ class MultUnit(bitwidth: Int, layer: Int) extends Module
     val doPrint = (io.inA =/= 0.U) || (io.inB =/= 0.U)
     when (doPrint)
     {
-        SynthesizePrintf("[layer %d] : multUnit : %d * %d\n", layer.U, io.inA, io.inB)
+        //SynthesizePrintf("[layer %d] : multUnit : %d * %d\n", layer.U, io.inA, io.inB)
     }
 
 

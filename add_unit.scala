@@ -19,7 +19,7 @@ class AddUnit(bitwidth: Int, nInputs: Int, layer: Int) extends Module {
     
     io.output := io.inA + io.inB
     
-    SynthesizePrintf("addunit-layer%d (%d) + (%d) = [%d]\n", layer.U, io.inA, io.inB, io.output)
+    //SynthesizePrintf("addunit-layer%d (%d) + (%d) = [%d]\n", layer.U, io.inA, io.inB, io.output)
 }
 
 

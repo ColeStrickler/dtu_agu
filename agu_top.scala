@@ -132,13 +132,13 @@ class AGUTop(params : AGUParams)(implicit p: Parameters) extends LazyModule
     {
         for (i <- 0 until params.nLoopRegs)
         {
-            SynthesizePrintf("loopreg(%d) %d\n", i.U, LoopRegs(i))
-            SynthesizePrintf("loopincreg(%d) %d\n", i.U, LoopIncRegs(i))
+            //SynthesizePrintf("loopreg(%d) %d\n", i.U, LoopRegs(i))
+            //SynthesizePrintf("loopincreg(%d) %d\n", i.U, LoopIncRegs(i))
         }
 
         for (i <- 0 until params.nConstRegs)
         {
-            SynthesizePrintf("constReg(%d) %d\n", i.U, ConstantRegs(i))
+            //SynthesizePrintf("constReg(%d) %d\n", i.U, ConstantRegs(i))
         }
     }
 
@@ -218,10 +218,10 @@ class AGUTop(params : AGUParams)(implicit p: Parameters) extends LazyModule
             {
                 for (x <- 0 until (totalFuncUnits)) {
                     for (y <- 0 until params.maxVarOutputs) {
-                        SynthesizePrintf("[AGUTop] Layer %d Routing input %d, output index %d: %d\n", i.U, x.U, y.U, RoutingConfigOut(i)(x)(y))
+                       // SynthesizePrintf("[AGUTop] Layer %d Routing input %d, output index %d: %d\n", i.U, x.U, y.U, RoutingConfigOut(i)(x)(y))
                     }
                 }
-                SynthesizePrintf("routingconfigout(%d) %d\n", i.U, RoutingConfigOut(i).asUInt)
+               // SynthesizePrintf("routingconfigout(%d) %d\n", i.U, RoutingConfigOut(i).asUInt)
             }
             
         }

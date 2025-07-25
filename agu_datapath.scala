@@ -124,8 +124,8 @@ class AGUDatapath(nLoopRegs : Int, nConstRegs: Int, nLayers: Int, nMultUnits: In
     {
         for (j <- 0 until nAddUnits)
         {
-            SynthesizePrintf("layer%d addUnit%d <-- input %d\n", i.U, j.U, routing(i).outputs(j)(0))
-            SynthesizePrintf("layer%d addUnit%d <-- input %d\n", i.U, j.U, routing(i).outputs(j)(1))
+            //SynthesizePrintf("layer%d addUnit%d <-- input %d\n", i.U, j.U, routing(i).outputs(j)(0))
+            //SynthesizePrintf("layer%d addUnit%d <-- input %d\n", i.U, j.U, routing(i).outputs(j)(1))
             AddLayers(i)(j).inA := routing(i).outputs(j)(0)
             AddLayers(i)(j).inB := routing(i).outputs(j)(1)
             routing(i+1).inputs(j) := AddLayers(i)(j).output
