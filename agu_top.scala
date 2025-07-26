@@ -189,11 +189,12 @@ class AGUTop(params : AGUParams)(implicit p: Parameters) extends LazyModule
         /*
             [Control Plane]
         */
-        val currentOutStatement = RegInit(0.U(log2Ceil(params.maxOutStatements))) // which out statement do we send down the pipeline
+        val currentOutStatement = RegInit(0.U(8.W)) // which out statement do we send down the pipeline
         val readyNewGen = Wire(Bool()) // will we send a new outstatement down the pipeline
         val outStatementAtLayer = RegInit(VecInit(Seq.fill(params.nLayers+1)(0.U(log2Ceil(params.maxOutStatements).W))))
         val validAtLayer = RegInit(VecInit(Seq.fill(params.nLayers+1)(false.B)))
         val stallLayers = Wire(Vec(params.nLayers+1, Bool()))
+        val lastOutStmt = Wire(Bool())
         readyNewGen := io.reqIO.doGen.fire && io.reqIO.doGen.bits && !stallLayers(0)
 
 
@@ -205,8 +206,17 @@ class AGUTop(params : AGUParams)(implicit p: Parameters) extends LazyModule
 
 
         // increment currentOutStatement if it was used. If at the last one, go back to the first
-        currentOutStatement := Mux(readyNewGen, Mux(currentOutStatement === usedOutStatements-1.U, 0.U, currentOutStatement+1.U), currentOutStatement)
+        
 
+        lastOutStmt := ((currentOutStatement + 1.U) % usedOutStatements) === 0.U
+        when (readyNewGen) {
+            currentOutStatement := (currentOutStatement + 1.U) % usedOutStatements
+        }
+        when (readyNewGen)
+        {
+            SynthesizePrintf("CurrentOutStatement %d, usedOutStatement %d\n", currentOutStatement, usedOutStatements)
+        }
+        
 
         val RoutingConfigOut = Wire(
             Vec(params.nLayers+1, Vec(totalFuncUnits, Vec(params.maxVarOutputs, UInt(8.W))))
@@ -252,8 +262,8 @@ class AGUTop(params : AGUParams)(implicit p: Parameters) extends LazyModule
 
         // update state registers
         val isIncLoopReg =  Seq.fill(params.nLoopRegs)(WireInit(false.B))
-        isIncLoopReg(0) := readyNewGen
-        when (readyNewGen)
+        isIncLoopReg(0) := readyNewGen 
+        when (readyNewGen && lastOutStmt)
         {
             LoopRegs(0) := Mux(LoopRegs(0) === LoopIncRegs(0) - 1.U, 0.U, LoopRegs(0)+1.U)
             for (i <- 1 until params.nLoopRegs)
