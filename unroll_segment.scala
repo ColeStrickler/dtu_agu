@@ -30,6 +30,7 @@ class UnrollSegment32() extends Module
 
 
     val reg = RegInit(0.U(32.W))
+    val remreg = RegInit(0.U(32.W))
     val vreg = RegInit(false.B)
     val mul = Wire(UInt(64.W))
     val int_mag_res = Wire(UInt(32.W))
@@ -51,16 +52,18 @@ class UnrollSegment32() extends Module
     {
         reg := 0.U
         vreg := false.B
+        remreg := 0.U
     }
     .elsewhen(io.inValue.valid)
     {
         reg := magic_res
         vreg := io.inValue.valid
+        remreg := (io.inValue.bits - magic_res)
     }
 
 
 
     io.index.valid := vreg
     io.index.bits := magic_res//reg
-    io.remainder := io.inValue.bits - magic_res
+    io.remainder := remreg
 }
