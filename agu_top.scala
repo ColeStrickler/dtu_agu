@@ -73,7 +73,21 @@ class AGUTop(params : AGUParams)(implicit p: Parameters) extends LazyModule
         val nOutStatements = RegInit(0.U(log2Ceil(params.maxOutStatements).W))
         val usedOutStatements = RegInit(0.U(log2Ceil(params.maxOutStatements).W))
         val config_reset = RegInit(false.B)
+
+        val unroll_unit = Module(new UnrollUnit(params))
+        /*
+            1.  We need to set up writesfrom the unroll unit,
+            2.  Pass in data size from outside,
+            3.  We are not currently passing in an offset address, just boolean doGen.
+                We need to pass in the offset for computation. Preferably with the RME base
+
+            3.  Sync up the io.reqIO.doGen with the unroll unit in
+            4.  Sync up the unroll unit.out.valid with datapath doGen
+            5.  Write unroll unit out registers to for loop registers
+            6.  We only need one input doGen from Requestor now, we need to control the rest from here.
+                Before we are inputting 1 doGen from requestor for each instance of 
         
+        */
 
 
 
@@ -124,6 +138,10 @@ class AGUTop(params : AGUParams)(implicit p: Parameters) extends LazyModule
         mmregBuf += usedOutStatementsReg
 
 
+
+        /*
+            We need an nLoopRegs used register to use with the unroll_unit?
+        */
         val LoopRegs = Seq.fill(params.nLoopRegs)(RegInit(0.U(params.bitwidth.W)))
         val LoopIncRegs = Seq.fill(params.nLoopRegs)(RegInit(0.U(params.bitwidth.W)))
         val ConstantRegs = Seq.fill(params.nConstRegs)(RegInit(0.U(params.bitwidth.W)))
