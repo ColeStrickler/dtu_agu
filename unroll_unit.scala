@@ -69,7 +69,8 @@ class UnrollUnit(params: AGUParams) extends Module
 
 
 
-
+    val IndicesValidOut = Wire(Vec(params.nLoopRegs, Bool()))
+    val AllIndicesValid = IndicesValidOut.reduce(_ && _)
     /*
         Here we attach the first and last UnrollSegments to their correct inputs/outputs
 
@@ -78,10 +79,11 @@ class UnrollUnit(params: AGUParams) extends Module
     val last = (params.nLoopRegs - 1)
     val singleLoop = (io.nForLoopsActive === 1.U)
     io.UnrolledInit.bits.OutStmtStart := UnrollSegments(last).remainder
-    io.UnrolledInit.bits.RegInitValues(last) := UnrollSegments(last).index
+    io.UnrolledInit.bits.RegInitValues(last) := UnrollSegments(last).index.bits
     UnrollSegments(last).inValue.bits := Mux(singleLoop,  access_num, UnrollSegments(last - 1).remainder)
     UnrollSegments(last).inValue.valid := Mux(singleLoop, io.AddressIn.fire, UnrollSegments(last - 1).index.valid)
     UnrollSegments(last).magic := io.MagicNumbers(last)
+    UnrollSegments(last).rst := io.UnrolledInit.fire
     IndicesValidOut(last) := UnrollSegments(last).index.valid
 
     val allLoopsUsed = (io.nForLoopsActive === params.nLoopRegs.U)
@@ -89,6 +91,7 @@ class UnrollUnit(params: AGUParams) extends Module
     UnrollSegments(0).inValue.bits := access_num
     UnrollSegments(0).inValue.valid := io.AddressIn.fire && allLoopsUsed // only valid when using all loop regs
     UnrollSegments(0).magic := io.MagicNumbers(0)
+    UnrollSegments(0).rst := io.UnrolledInit.fire
     IndicesValidOut(0) := Mux(allLoopsUsed, UnrollSegments(0).index.valid, true.B)
     
 
@@ -97,8 +100,7 @@ class UnrollUnit(params: AGUParams) extends Module
 
 
 
-    val IndicesValidOut = Wire(Vec(params.nLoopRegs, Bool()))
-    val AllIndicesValid = IndicesValidOut.reduce(_ && _)
+    
 
 
     /* 

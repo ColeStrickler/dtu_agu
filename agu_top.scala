@@ -96,7 +96,11 @@ class AGUTop(params : AGUParams)(implicit p: Parameters) extends LazyModule
         
         unroll_unit.io.DataSize := io.reqIO.data_size
         unroll_unit.io.nForLoopsActive := usedForLoops
-        unroll_unit.io.AddressIn := io.reqIO.offset
+        // Feed incoming addresses into the unroll unit
+        unroll_unit.io.AddressIn.bits  := io.reqIO.offsetAddrFromBase.bits
+        unroll_unit.io.AddressIn.valid := io.reqIO.offsetAddrFromBase.valid
+        io.reqIO.offsetAddrFromBase.ready := unroll_unit.io.AddressIn.ready
+
         unroll_unit.io.UnrolledInit.ready := !datapath_active
 
 
@@ -192,7 +196,7 @@ class AGUTop(params : AGUParams)(implicit p: Parameters) extends LazyModule
             // we wire backwards
             for (i <- (params.nLoopRegs - 1) to 0 by -1)
             {
-                LoopRegs(params.nLoopRegs - i) := unroll_unit.io.UnrolledInit.bits.RegInitValues(i)
+                LoopRegs(params.nLoopRegs - i - 1) := unroll_unit.io.UnrolledInit.bits.RegInitValues(i)
             }
             
         }
@@ -208,8 +212,8 @@ class AGUTop(params : AGUParams)(implicit p: Parameters) extends LazyModule
         val bytesUsedIncLoop =  bytesPerLoop * params.nLoopRegs 
         val offsetConstRegs =   bytesUsedRouting+bytesUsedForLoop+bytesUsedIncLoop
         val bytesUsedConst =    params.nConstRegs*bytesPerConst
-        val offsetMagicRegs =   offsetConstRegs+bytesPerConst
-        val bytesPerMagic =     9 // m(4), s(4), add_indicator(1)
+        val offsetMagicRegs =   offsetConstRegs+bytesUsedConst
+        val bytesPerMagic =     12 // m(4), s(4), add_indicator(4) --> we give whole word even tho it is just bool
         assert(offsetMagicRegs < 0xf00)
         for (i <- 0 until params.nLoopRegs) // Loop registers immediately after routing cells
         {
@@ -225,7 +229,7 @@ class AGUTop(params : AGUParams)(implicit p: Parameters) extends LazyModule
         {
             mmregBuf += (((offsetMagicRegs + i*bytesPerMagic)  -> Seq(RegField(32, magic_reg_M(i), RegFieldDesc("magic_m", "magic_m")))))
             mmregBuf += (((offsetMagicRegs + i*bytesPerMagic + 0x4)  -> Seq(RegField(32, magic_reg_S(i), RegFieldDesc("magic_s", "magic_s")))))
-            mmregBuf += (((offsetMagicRegs + i*bytesPerMagic + 0x8)  -> Seq(RegField(8, magic_reg_AddInidicator(i), RegFieldDesc("magic_addIndicator", "magic_addIndicator")))))
+            mmregBuf += (((offsetMagicRegs + i*bytesPerMagic + 0x8)  -> Seq(RegField(1, magic_reg_AddInidicator(i), RegFieldDesc("magic_addIndicator", "magic_addIndicator")))))
         }
 
 

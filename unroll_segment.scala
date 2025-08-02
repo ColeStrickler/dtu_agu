@@ -20,7 +20,7 @@ case class UnrollSegmentIO(bitwidth : Int = 32) extends Bundle
     val magic = new MagicNumber(bitwidth)
     val index = Valid(Output(UInt(bitwidth.W)))
     val remainder = Output(UInt(bitwidth.W))
-    val inValue = Valid(Input(UInt(bitwidth.W)))
+    val inValue = Flipped(Valid((UInt(bitwidth.W))))
     val rst = Input(Bool())
 }
 

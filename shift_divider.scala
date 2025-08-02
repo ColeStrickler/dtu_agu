@@ -9,7 +9,7 @@ import midas.targetutils.SynthesizePrintf
 
 
 /* 
-
+    Works for powers of 2
 */
 class ShiftDivider(bitwidth: Int) extends Module
 {
@@ -31,8 +31,11 @@ class ShiftDivider(bitwidth: Int) extends Module
         assert(isPowerOf2 && isAllowedValue, "data_size must be one of the allowed power-of-2 values: 1,2,4,8,16,32")
     }
 
+    
+
     val res = Wire(UInt(bitwidth.W)) 
     val rem = Wire(UInt(bitwidth.W))
+    res := 0.U // default
     switch(io.data_size.bits)
     {
         is(1.U)   { res := io.addr_in }
@@ -44,6 +47,7 @@ class ShiftDivider(bitwidth: Int) extends Module
     }
 
     rem := io.addr_in - res
+    io.remainder := rem
     io.quotient := res
 
 
