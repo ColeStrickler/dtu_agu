@@ -48,7 +48,7 @@ case class AGUParams
 
 class AGUTop(params : AGUParams)(implicit p: Parameters) extends LazyModule 
 {
-
+    val CacheLineSizeBytes = 64.U // bytes
     val device = new SimpleDevice("dtlagu",Seq("ku-csl,dtlagu"))
 
     val ctlnode = TLRegisterNode(
@@ -72,21 +72,52 @@ class AGUTop(params : AGUParams)(implicit p: Parameters) extends LazyModule
         */
         val nOutStatements = RegInit(0.U(log2Ceil(params.maxOutStatements).W))
         val usedOutStatements = RegInit(0.U(log2Ceil(params.maxOutStatements).W))
+        val usedForLoops = RegInit(0.U(log2Ceil(params.nLoopRegs).W))
         val config_reset = RegInit(false.B)
 
-        val unroll_unit = Module(new UnrollUnit(params))
-        /*
-            1.  We need to set up writesfrom the unroll unit,
-            2.  Pass in data size from outside,
-            3.  We are not currently passing in an offset address, just boolean doGen.
-                We need to pass in the offset for computation. Preferably with the RME base
+        val magic_reg_M = RegInit(VecInit(Seq.fill(params.nLoopRegs)(0.U(32.W))))
+        val magic_reg_S = RegInit(VecInit(Seq.fill(params.nLoopRegs)(0.U(32.W))))
+        val magic_reg_AddInidicator = RegInit(VecInit(Seq.fill(params.nLoopRegs)(false.B)))
 
-            3.  Sync up the io.reqIO.doGen with the unroll unit in
-            4.  Sync up the unroll unit.out.valid with datapath doGen
-            5.  Write unroll unit out registers to for loop registers
-            6.  We only need one input doGen from Requestor now, we need to control the rest from here.
-                Before we are inputting 1 doGen from requestor for each instance of 
+        val unroll_unit = Module(new UnrollUnit(params))
+
+        /*
+            Need to think if we want to do this the other way around/backwards (not that it matters for functionality)
+            for readability
+        */
+        for (i <- 0 until params.nLoopRegs)
+        {
+            unroll_unit.io.MagicNumbers(i).M :=                 magic_reg_M(i)
+            unroll_unit.io.MagicNumbers(i).s :=                 magic_reg_S(i)
+            unroll_unit.io.MagicNumbers(i).add_indicator :=     magic_reg_AddInidicator(i).asBool
+        }
+
+        val datapath_active = RegInit(false.B)
         
+        unroll_unit.io.DataSize := io.reqIO.data_size
+        unroll_unit.io.nForLoopsActive := usedForLoops
+        unroll_unit.io.AddressIn := io.reqIO.offset
+        unroll_unit.io.UnrolledInit.ready := !datapath_active
+
+
+        /*
+            1.  We need to set up writesfrom the unroll unit, [x]
+            2.  Pass in data size from outside, [x]
+            3.  We are not currently passing in an offset address, just boolean doGen. [x]
+                We need to pass in the offset for computation. Preferably with the RME base [x]
+
+            3.  Sync up the io.reqIO.doGen with the unroll unit in[x]
+            4.  Sync up the unroll unit.out.valid with datapath doGen [x]
+            5.  Write unroll unit out registers to for loop registers [x]
+            6.  We only need one input doGen from Requestor now, we need to control the rest from here. [x]
+                Before we are inputting 1 doGen from requestor for each instance of 
+            7.  possibly get rid of for loop register writes in the compiler --> actually i think we just set them to zero, which is fine
+
+
+            8.  add "usedForLoops" write to compiler
+            9.  add magicReg writes to compiler
+            10. need to implement decoupled IO interface control for the unroll unit [x]
+                unroll_unit.io.AddressIn := io.reqIO.offset
         */
 
 
@@ -134,8 +165,10 @@ class AGUTop(params : AGUParams)(implicit p: Parameters) extends LazyModule
         val bytesUsedRouting = bytesPerCell*params.maxOutStatements*(params.nLayers+1)*totalFuncUnits*params.maxVarOutputs
         val reg_reset = ((0xf00) -> Seq(RegField(1, config_reset, RegFieldDesc("reset", "reset"))))
         val usedOutStatementsReg = ((0xf01) -> Seq(RegField(8, usedOutStatements, RegFieldDesc("nOutStatements", "nOutStatements"))))
+        val usedForLoopsReg = ((0xf02) -> Seq(RegField(8, usedForLoops, RegFieldDesc("nForLoops", "nForLoops"))))
         mmregBuf += reg_reset
         mmregBuf += usedOutStatementsReg
+        mmregBuf += usedForLoopsReg
 
 
 
@@ -145,31 +178,39 @@ class AGUTop(params : AGUParams)(implicit p: Parameters) extends LazyModule
         val LoopRegs = Seq.fill(params.nLoopRegs)(RegInit(0.U(params.bitwidth.W)))
         val LoopIncRegs = Seq.fill(params.nLoopRegs)(RegInit(0.U(params.bitwidth.W)))
         val ConstantRegs = Seq.fill(params.nConstRegs)(RegInit(0.U(params.bitwidth.W)))
+
+
+
+        /* 
+            We need to write the init to the for loops registers
+
+            The last index from unroll_unit.io.UnrolledInit.Reg is the first and innermost for-loop
+
+        */
+        when (unroll_unit.io.UnrolledInit.fire)
+        {
+            // we wire backwards
+            for (i <- (params.nLoopRegs - 1) to 0 by -1)
+            {
+                LoopRegs(params.nLoopRegs - i) := unroll_unit.io.UnrolledInit.bits.RegInitValues(i)
+            }
+            
+        }
+
+
         // we will give each of these 32 bits for now
-        when (io.reqIO.doGen.fire)
-    {
-        for (i <- 0 until params.nLoopRegs)
-        {
-            //SynthesizePrintf("loopreg(%d) %d\n", i.U, LoopRegs(i))
-            //SynthesizePrintf("loopincreg(%d) %d\n", i.U, LoopIncRegs(i))
-        }
-
-        for (i <- 0 until params.nConstRegs)
-        {
-            //SynthesizePrintf("constReg(%d) %d\n", i.U, ConstantRegs(i))
-        }
-    }
 
 
 
-
-
-        val bytesPerLoop = params.bitwidth/8
-        val bytesPerConst = params.bitwidth/8
-        val bytesUsedForLoop = bytesPerLoop * params.nLoopRegs 
-        val bytesUsedIncLoop = bytesPerLoop * params.nLoopRegs 
-        val offsetConstRegs = bytesUsedRouting+bytesUsedForLoop+bytesUsedIncLoop
-        assert(offsetConstRegs < 0xf00)
+        val bytesPerLoop =      params.bitwidth/8
+        val bytesPerConst =     params.bitwidth/8
+        val bytesUsedForLoop =  bytesPerLoop * params.nLoopRegs 
+        val bytesUsedIncLoop =  bytesPerLoop * params.nLoopRegs 
+        val offsetConstRegs =   bytesUsedRouting+bytesUsedForLoop+bytesUsedIncLoop
+        val bytesUsedConst =    params.nConstRegs*bytesPerConst
+        val offsetMagicRegs =   offsetConstRegs+bytesPerConst
+        val bytesPerMagic =     9 // m(4), s(4), add_indicator(1)
+        assert(offsetMagicRegs < 0xf00)
         for (i <- 0 until params.nLoopRegs) // Loop registers immediately after routing cells
         {
             mmregBuf += ((bytesUsedRouting+(i*bytesPerLoop) -> Seq(RegField(params.bitwidth, LoopRegs(i), RegFieldDesc("forloop", "forloop")))))
@@ -179,6 +220,19 @@ class AGUTop(params : AGUParams)(implicit p: Parameters) extends LazyModule
         {
             mmregBuf += ((offsetConstRegs + i*bytesPerConst) -> Seq(RegField(params.bitwidth, ConstantRegs(i), RegFieldDesc("constreg", "constreg"))))
         }
+
+        for (i <- 0 until params.nLoopRegs)
+        {
+            mmregBuf += (((offsetMagicRegs + i*bytesPerMagic)  -> Seq(RegField(32, magic_reg_M(i), RegFieldDesc("magic_m", "magic_m")))))
+            mmregBuf += (((offsetMagicRegs + i*bytesPerMagic + 0x4)  -> Seq(RegField(32, magic_reg_S(i), RegFieldDesc("magic_s", "magic_s")))))
+            mmregBuf += (((offsetMagicRegs + i*bytesPerMagic + 0x8)  -> Seq(RegField(8, magic_reg_AddInidicator(i), RegFieldDesc("magic_addIndicator", "magic_addIndicator")))))
+        }
+
+
+
+
+
+
 
         val mmreg: Seq[(Int, Seq[RegField])] = mmregBuf.toSeq
         mmregBuf.foreach { case (addr, fields) =>
@@ -213,8 +267,20 @@ class AGUTop(params : AGUParams)(implicit p: Parameters) extends LazyModule
         val validAtLayer = RegInit(VecInit(Seq.fill(params.nLayers+1)(false.B)))
         val stallLayers = Wire(Vec(params.nLayers+1, Bool()))
         val lastOutStmt = Wire(Bool())
-        readyNewGen := io.reqIO.doGen.fire && io.reqIO.doGen.bits && !stallLayers(0)
+        val toGen = RegInit(0.U(8.W))
+        val sentForGen = RegInit(0.U(8.W))
 
+        val shift_divider = Module(new ShiftDivider(8)) // save timing latency, since we only allow certain sizes
+        shift_divider.io.addr_in := CacheLineSizeBytes
+        shift_divider.io.data_size.bits := io.reqIO.data_size
+        shift_divider.io.data_size.valid := datapath_active
+        toGen := shift_divider.io.quotient
+        assert(shift_divider.io.remainder === 0.U)
+
+        // if we pass in the last one for gen, we can take anbother
+        datapath_active := Mux(datapath_active, !(sentForGen === (toGen-1.U) && readyNewGen), unroll_unit.io.UnrolledInit.fire)  
+        readyNewGen := datapath_active && !stallLayers(0)
+        toGen := toGen + readyNewGen // dataflow architecture should take input every time if not stalled
 
 
         // shift in valid signal
@@ -227,9 +293,16 @@ class AGUTop(params : AGUParams)(implicit p: Parameters) extends LazyModule
         
 
         lastOutStmt := ((currentOutStatement + 1.U) % usedOutStatements) === 0.U
-        when (readyNewGen) {
+
+        when(unroll_unit.io.UnrolledInit.fire)
+        {
+            currentOutStatement := unroll_unit.io.UnrolledInit.bits.OutStmtStart
+        }
+        .elsewhen (readyNewGen) {
             currentOutStatement := (currentOutStatement + 1.U) % usedOutStatements
         }
+
+
         when (readyNewGen)
         {
             SynthesizePrintf("CurrentOutStatement %d, usedOutStatement %d\n", currentOutStatement, usedOutStatements)
@@ -241,17 +314,7 @@ class AGUTop(params : AGUParams)(implicit p: Parameters) extends LazyModule
         )
         for (i <- 0 until params.nLayers+1)
         {
-            RoutingConfigOut(i) := RoutingConfig(outStatementAtLayer(i))(i)
-            when (io.reqIO.doGen.fire)
-            {
-                for (x <- 0 until (totalFuncUnits)) {
-                    for (y <- 0 until params.maxVarOutputs) {
-                       // SynthesizePrintf("[AGUTop] Layer %d Routing input %d, output index %d: %d\n", i.U, x.U, y.U, RoutingConfigOut(i)(x)(y))
-                    }
-                }
-               // SynthesizePrintf("routingconfigout(%d) %d\n", i.U, RoutingConfigOut(i).asUInt)
-            }
-            
+            RoutingConfigOut(i) := RoutingConfig(outStatementAtLayer(i))(i)       
         }
 
 
@@ -316,7 +379,12 @@ class AGUTop(params : AGUParams)(implicit p: Parameters) extends LazyModule
             stallLayers(i) := stallLayers(i+1) && validAtLayer(i)
         }
         dpath.io.StallLayer := stallLayers
-        io.reqIO.doGen.ready := !stallLayers(0) // accept new request if we are not stalled at layer 0
+
+
+        /*
+            We moved this control to datapath_active
+        */
+        //io.reqIO.doGen.ready := !stallLayers(0) // accept new request if we are not stalled at layer 0
 
 
         io.reqIO.offset.valid := validAtLayer(validAtLayer.length-1) && !stallLayers(stallLayers.length-1) 

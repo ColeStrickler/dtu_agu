@@ -31,16 +31,21 @@ class UnrollUnit(params: AGUParams) extends Module
     val io = IO(new UnrollUnitIO(params))
     val shift_divider = Module(new ShiftDivider(params.bitwidth))
 
-
+    /*
+        We need to mark wehen we can reasonably take input IO
+    */
     
+    val actively_computing = RegInit(false.B)
+    actively_computing := Mux(actively_computing, !io.UnrolledInit.fire, io.AddressIn.fire)
+    io.AddressIn.ready:= !actively_computing
 
     shift_divider.io.addr_in := io.AddressIn.bits
-    shift_divider.io.data_size.valid := io.AddressIn.valid // make sure we set up datasize first
+    shift_divider.io.data_size.valid := io.AddressIn.fire // make sure we set up datasize first
     shift_divider.io.data_size.bits := io.DataSize
     val access_num = shift_divider.io.quotient
 
 
-    when(io.AddressIn.valid)
+    when(io.AddressIn.fire)
     {
         /*
             This shouldn't happen since we are asserting only power of 2
