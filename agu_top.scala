@@ -79,29 +79,7 @@ class AGUTop(params : AGUParams)(implicit p: Parameters) extends LazyModule
         val magic_reg_S = RegInit(VecInit(Seq.fill(params.nLoopRegs)(0.U(32.W))))
         val magic_reg_AddInidicator = RegInit(VecInit(Seq.fill(params.nLoopRegs)(false.B)))
 
-        val unroll_unit = Module(new UnrollUnit(params))
-
-        /*
-            Need to think if we want to do this the other way around/backwards (not that it matters for functionality)
-            for readability
-        */
-        for (i <- 0 until params.nLoopRegs)
-        {
-            unroll_unit.io.MagicNumbers(i).M :=                 magic_reg_M(i)
-            unroll_unit.io.MagicNumbers(i).s :=                 magic_reg_S(i)
-            unroll_unit.io.MagicNumbers(i).add_indicator :=     magic_reg_AddInidicator(i).asBool
-        }
-
-        val datapath_active = RegInit(false.B)
         
-        unroll_unit.io.DataSize := io.reqIO.data_size
-        unroll_unit.io.nForLoopsActive := usedForLoops
-        // Feed incoming addresses into the unroll unit
-        unroll_unit.io.AddressIn.bits  := io.reqIO.offsetAddrFromBase.bits
-        unroll_unit.io.AddressIn.valid := io.reqIO.offsetAddrFromBase.valid
-        io.reqIO.offsetAddrFromBase.ready := unroll_unit.io.AddressIn.ready
-
-        unroll_unit.io.UnrolledInit.ready := !datapath_active
 
 
         /*
@@ -116,10 +94,8 @@ class AGUTop(params : AGUParams)(implicit p: Parameters) extends LazyModule
             6.  We only need one input doGen from Requestor now, we need to control the rest from here. [x]
                 Before we are inputting 1 doGen from requestor for each instance of 
             7.  possibly get rid of for loop register writes in the compiler --> actually i think we just set them to zero, which is fine
-
-
-            8.  add "usedForLoops" write to compiler
-            9.  add magicReg writes to compiler
+            8.  add "usedForLoops" write to compiler [x]
+            9.  add magicReg writes to compiler [x]
             10. need to implement decoupled IO interface control for the unroll unit [x]
                 unroll_unit.io.AddressIn := io.reqIO.offset
         */
@@ -173,6 +149,7 @@ class AGUTop(params : AGUParams)(implicit p: Parameters) extends LazyModule
         mmregBuf += reg_reset
         mmregBuf += usedOutStatementsReg
         mmregBuf += usedForLoopsReg
+        
 
 
 
@@ -182,6 +159,48 @@ class AGUTop(params : AGUParams)(implicit p: Parameters) extends LazyModule
         val LoopRegs = Seq.fill(params.nLoopRegs)(RegInit(0.U(params.bitwidth.W)))
         val LoopIncRegs = Seq.fill(params.nLoopRegs)(RegInit(0.U(params.bitwidth.W)))
         val ConstantRegs = Seq.fill(params.nConstRegs)(RegInit(0.U(params.bitwidth.W)))
+        val StrideRegs = Seq.fill(params.nLoopRegs)(RegInit(0.U(32.W)))
+
+
+        /*
+            probably want to do this better for power efficiency later on, maybe trigger on a write function to mmio register
+            but this will suffice for now
+            may even want to map this in mmio? and handle writes with compiler, idk
+        */
+        val stride = VecInit(Seq.fill(params.nLoopRegs)(0.U(32.W)))
+        stride(0) := usedOutStatements
+        for (i <- 1 until params.nLoopRegs)
+        {
+            stride(i) := stride(i-1) * LoopIncRegs(i-1)
+        }
+
+        
+        val unroll_unit = Module(new UnrollUnit(params))
+
+        /*
+            Need to think if we want to do this the other way around/backwards (not that it matters for functionality)
+            for readability
+        */
+        for (i <- 0 until params.nLoopRegs)
+        {
+            unroll_unit.io.MagicNumbers(i).M :=                 magic_reg_M(i)
+            unroll_unit.io.MagicNumbers(i).s :=                 magic_reg_S(i)
+            unroll_unit.io.MagicNumbers(i).add_indicator :=     magic_reg_AddInidicator(i).asBool
+            unroll_unit.io.MagicNumbers(i).stride :=            stride(params.nLoopRegs-1-i)
+        }
+
+        val datapath_active = RegInit(false.B)
+        
+        unroll_unit.io.DataSize := io.reqIO.data_size
+        unroll_unit.io.nForLoopsActive := usedForLoops
+        // Feed incoming addresses into the unroll unit
+        unroll_unit.io.AddressIn.bits  := io.reqIO.offsetAddrFromBase.bits
+        unroll_unit.io.AddressIn.valid := io.reqIO.offsetAddrFromBase.valid
+        io.reqIO.offsetAddrFromBase.ready := unroll_unit.io.AddressIn.ready
+
+        unroll_unit.io.UnrolledInit.ready := !datapath_active
+
+
 
 
 
@@ -214,7 +233,7 @@ class AGUTop(params : AGUParams)(implicit p: Parameters) extends LazyModule
         val bytesUsedConst =    params.nConstRegs*bytesPerConst
         val offsetMagicRegs =   offsetConstRegs+bytesUsedConst
         val bytesPerMagic =     12 // m(4), s(4), add_indicator(4) --> we give whole word even tho it is just bool
-        assert(offsetMagicRegs < 0xf00)
+        assert(offsetMagicRegs < 0xf00, "offset magic regs < 0xf00")
         for (i <- 0 until params.nLoopRegs) // Loop registers immediately after routing cells
         {
             mmregBuf += ((bytesUsedRouting+(i*bytesPerLoop) -> Seq(RegField(params.bitwidth, LoopRegs(i), RegFieldDesc("forloop", "forloop")))))
@@ -250,18 +269,6 @@ class AGUTop(params : AGUParams)(implicit p: Parameters) extends LazyModule
         */
 
 
-
-
-
-
-
-
-
-
-
-
-
-
         /*
             [Control Plane]
         */
@@ -279,12 +286,12 @@ class AGUTop(params : AGUParams)(implicit p: Parameters) extends LazyModule
         shift_divider.io.data_size.bits := io.reqIO.data_size
         shift_divider.io.data_size.valid := datapath_active
         toGen := shift_divider.io.quotient
-        assert(shift_divider.io.remainder === 0.U)
+        //assert(shift_divider.io.remainder === 0.U)
 
         // if we pass in the last one for gen, we can take anbother
         datapath_active := Mux(datapath_active, !(sentForGen === (toGen-1.U) && readyNewGen), unroll_unit.io.UnrolledInit.fire)  
         readyNewGen := datapath_active && !stallLayers(0)
-        toGen := toGen + readyNewGen // dataflow architecture should take input every time if not stalled
+        sentForGen := sentForGen + readyNewGen // dataflow architecture should take input every time if not stalled
 
 
         // shift in valid signal

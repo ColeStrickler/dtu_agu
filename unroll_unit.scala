@@ -36,21 +36,30 @@ class UnrollUnit(params: AGUParams) extends Module
     */
     
     val actively_computing = RegInit(false.B)
+    val debug_addr_reg = RegInit(0.U(32.W))
+    val debug_div_reg = RegInit(0.U(32.W))
     actively_computing := Mux(actively_computing, !io.UnrolledInit.fire, io.AddressIn.fire)
     io.AddressIn.ready:= !actively_computing
+
+    debug_addr_reg := Mux(io.AddressIn.fire, io.AddressIn.bits, debug_addr_reg)
+   
+
 
     shift_divider.io.addr_in := io.AddressIn.bits
     shift_divider.io.data_size.valid := io.AddressIn.fire // make sure we set up datasize first
     shift_divider.io.data_size.bits := io.DataSize
     val access_num = shift_divider.io.quotient
+    debug_div_reg := Mux(io.AddressIn.fire, access_num, debug_div_reg)
 
-
+    val entry = params.nLoopRegs.U - io.nForLoopsActive
     when(io.AddressIn.fire)
     {
+
+        SynthesizePrintf("[UnrollUnit] io.AddressIn.fire 0x%x loopsUsed %d, data size %d, ENTRY: %d\n", io.AddressIn.bits, io.nForLoopsActive, io.DataSize, entry)
         /*
             This shouldn't happen since we are asserting only power of 2
         */
-        assert(shift_divider.io.remainder === 0.U) 
+        SynthesizePrintf("shift_divider.io.remainder === 0.U %d, remainder: %d\n", shift_divider.io.remainder === 0.U, shift_divider.io.remainder)
     }
 
 
@@ -61,7 +70,7 @@ class UnrollUnit(params: AGUParams) extends Module
     */
     val UnrollSegments = VecInit(
         (0 until params.nLoopRegs).map { unitIdx =>
-            val unroll_seg = Module(new UnrollSegment32()) 
+            val unroll_seg = Module(new UnrollSegment32(unitIdx)) 
             unroll_seg.io
         }
     )
@@ -95,14 +104,7 @@ class UnrollUnit(params: AGUParams) extends Module
     IndicesValidOut(0) := Mux(allLoopsUsed, UnrollSegments(0).index.valid, true.B)
     
 
-
-
-
-
-
     
-
-
     /* 
         Until or to zero? are we handling the zero index correctly
 
@@ -115,21 +117,22 @@ class UnrollUnit(params: AGUParams) extends Module
         /*
             where we start the pipeline, this will create dynamic pipeline latency
         */
-        val entry = params.nLoopRegs.U - io.nForLoopsActive
-
-
-
-        when (io.nForLoopsActive === entry)
+        when (i.U === entry)
         {
             // we use access num as we need the ShiftDivide preprocessing step done first
             UnrollSegments(i).inValue.bits := access_num 
             UnrollSegments(i).inValue.valid := io.AddressIn.valid
+            when(io.AddressIn.valid)
+            {
+                 SynthesizePrintf("Here\n")
+            }
+           
         }
         .otherwise
         {
-            UnrollSegments(i).inValue.bits := UnrollSegments(i+1).remainder
+            UnrollSegments(i).inValue.bits := UnrollSegments(i-1).remainder
             // currently these valids stay on, may want to shut off after 1 cycle high
-            UnrollSegments(i).inValue.valid := UnrollSegments(i+1).index.valid
+            UnrollSegments(i).inValue.valid := UnrollSegments(i-1).index.valid
         }
 
 
@@ -167,6 +170,15 @@ class UnrollUnit(params: AGUParams) extends Module
 
     }
 
+    when (AllIndicesValid)
+    {
+        SynthesizePrintf("WorkingAddr 0x%x, Working access_num %d\n", debug_addr_reg, debug_div_reg)
+        for (i <- 0 until IndicesValidOut.size)
+        {       
+            SynthesizePrintf("IndicesValidOut(%d): %d\n", i.U, IndicesValidOut(i))
+            SynthesizePrintf("UnrollSegments(%d).index.bits %d\n", i.U, UnrollSegments(i).index.bits)
+        }
+    }
 
     io.UnrolledInit.valid := AllIndicesValid
 

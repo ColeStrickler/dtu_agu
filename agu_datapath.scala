@@ -37,6 +37,7 @@ class AGUDatapath(nLoopRegs : Int, nConstRegs: Int, nLayers: Int, nMultUnits: In
 
     when (io.doGen)
     {
+        SynthesizePrintf("[AGUDatapath] io.doGen %d\n", io.doGen)
         for (i <- 0 until nLoopRegs)
         {
             SynthesizePrintf("loopreg(%d) %d\n", i.U, LoopRegs(i))

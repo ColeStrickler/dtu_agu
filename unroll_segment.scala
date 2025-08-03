@@ -12,6 +12,7 @@ case class MagicNumber(bitwidth : Int = 32) extends Bundle
     val M = Input(UInt(bitwidth.W))
     val s = Input(UInt(bitwidth.W))
     val add_indicator = Input(Bool())
+    val stride = Input(UInt(32.W))
 }
 
 
@@ -24,7 +25,7 @@ case class UnrollSegmentIO(bitwidth : Int = 32) extends Bundle
     val rst = Input(Bool())
 }
 
-class UnrollSegment32() extends Module
+class UnrollSegment32(index: Int) extends Module
 {
     val io = IO(new UnrollSegmentIO(32))
 
@@ -56,14 +57,17 @@ class UnrollSegment32() extends Module
     }
     .elsewhen(io.inValue.valid)
     {
+        SynthesizePrintf("[UnrollSegment32_%d] io.inValue.valid, bits %d\n", index.U, io.inValue.bits)
+        SynthesizePrintf("[UnrollSegment32_%d] M %d, S %d, add_indicator %d\n", index.U, io.magic.M, io.magic.s, io.magic.add_indicator)
+        SynthesizePrintf("[UnrollSegment32_%d] Reg %d\n", index.U, magic_res)
         reg := magic_res
         vreg := io.inValue.valid
-        remreg := (io.inValue.bits - magic_res)
+        remreg := (io.inValue.bits - (magic_res*io.magic.stride))
     }
 
 
 
     io.index.valid := vreg
-    io.index.bits := magic_res//reg
+    io.index.bits := reg
     io.remainder := remreg
 }
