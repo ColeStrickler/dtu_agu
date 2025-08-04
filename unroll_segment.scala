@@ -9,8 +9,8 @@ import midas.targetutils.SynthesizePrintf
 
 case class MagicNumber(bitwidth : Int = 32) extends Bundle
 {
-    val M = Input(UInt(bitwidth.W))
-    val s = Input(UInt(bitwidth.W))
+    val M = Input(UInt(64.W))
+    val s = Input(UInt(32.W))
     val add_indicator = Input(Bool())
     val stride = Input(UInt(32.W))
 }
@@ -54,12 +54,12 @@ class UnrollSegment32(index: Int) extends Module
         reg := 0.U
         vreg := false.B
         remreg := 0.U
+        SynthesizePrintf("[UnrollSegment32_%d] io.inValue.valid, bits %d\n", index.U, io.inValue.bits)
+        SynthesizePrintf("[UnrollSegment32_%d] M %d, S %d, add_indicator %d\n", index.U, io.magic.M, io.magic.s, io.magic.add_indicator)
+        SynthesizePrintf("[UnrollSegment32_%d] Reg %d, remreg %d\n", index.U, reg, remreg)
     }
     .elsewhen(io.inValue.valid)
     {
-        SynthesizePrintf("[UnrollSegment32_%d] io.inValue.valid, bits %d\n", index.U, io.inValue.bits)
-        SynthesizePrintf("[UnrollSegment32_%d] M %d, S %d, add_indicator %d\n", index.U, io.magic.M, io.magic.s, io.magic.add_indicator)
-        SynthesizePrintf("[UnrollSegment32_%d] Reg %d\n", index.U, magic_res)
         reg := magic_res
         vreg := io.inValue.valid
         remreg := (io.inValue.bits - (magic_res*io.magic.stride))

@@ -80,7 +80,7 @@ class AGUTop(params : AGUParams)(implicit p: Parameters) extends LazyModule
         val usedForLoops = RegInit(0.U(log2Ceil(params.nLoopRegs).W))
         val config_reset = RegInit(false.B)
 
-        val magic_reg_M = RegInit(VecInit(Seq.fill(params.nLoopRegs)(0.U(32.W))))
+        val magic_reg_M = RegInit(VecInit(Seq.fill(params.nLoopRegs)(0.U(64.W))))
         val magic_reg_S = RegInit(VecInit(Seq.fill(params.nLoopRegs)(0.U(32.W))))
         val magic_reg_AddInidicator = RegInit(VecInit(Seq.fill(params.nLoopRegs)(false.B)))
 
@@ -237,7 +237,7 @@ class AGUTop(params : AGUParams)(implicit p: Parameters) extends LazyModule
         val offsetConstRegs =   bytesUsedRouting+bytesUsedForLoop+bytesUsedIncLoop
         val bytesUsedConst =    params.nConstRegs*bytesPerConst
         val offsetMagicRegs =   offsetConstRegs+bytesUsedConst
-        val bytesPerMagic =     12 // m(4), s(4), add_indicator(4) --> we give whole word even tho it is just bool
+        val bytesPerMagic =     16 // m(4), s(4), add_indicator(4) --> we give whole word even tho it is just bool
         assert(offsetMagicRegs < 0xf00, "offset magic regs < 0xf00")
         for (i <- 0 until params.nLoopRegs) // Loop registers immediately after routing cells
         {
@@ -251,9 +251,9 @@ class AGUTop(params : AGUParams)(implicit p: Parameters) extends LazyModule
 
         for (i <- 0 until params.nLoopRegs)
         {
-            mmregBuf += (((offsetMagicRegs + i*bytesPerMagic)  -> Seq(RegField(32, magic_reg_M(i), RegFieldDesc("magic_m", "magic_m")))))
-            mmregBuf += (((offsetMagicRegs + i*bytesPerMagic + 0x4)  -> Seq(RegField(32, magic_reg_S(i), RegFieldDesc("magic_s", "magic_s")))))
-            mmregBuf += (((offsetMagicRegs + i*bytesPerMagic + 0x8)  -> Seq(RegField(1, magic_reg_AddInidicator(i), RegFieldDesc("magic_addIndicator", "magic_addIndicator")))))
+            mmregBuf += (((offsetMagicRegs + i*bytesPerMagic)  -> Seq(RegField(64, magic_reg_M(i), RegFieldDesc("magic_m", "magic_m")))))
+            mmregBuf += (((offsetMagicRegs + i*bytesPerMagic + 0x8)  -> Seq(RegField(32, magic_reg_S(i), RegFieldDesc("magic_s", "magic_s")))))
+            mmregBuf += (((offsetMagicRegs + i*bytesPerMagic + 0xc)  -> Seq(RegField(1, magic_reg_AddInidicator(i), RegFieldDesc("magic_addIndicator", "magic_addIndicator")))))
         }
 
 
@@ -322,6 +322,10 @@ class AGUTop(params : AGUParams)(implicit p: Parameters) extends LazyModule
         when (readyNewGen)
         {
             SynthesizePrintf("CurrentOutStatement %d, usedOutStatement %d\n", currentOutStatement, usedOutStatements)
+            for (i <- 0 until params.nLoopRegs)
+            {
+                SynthesizePrintf("loopReg(%d) %d\n", i.U, LoopRegs(i))
+            }
         }
         
 

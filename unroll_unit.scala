@@ -87,7 +87,7 @@ class UnrollUnit(params: AGUParams) extends Module
     */
     val last = (params.nLoopRegs - 1)
     val singleLoop = (io.nForLoopsActive === 1.U)
-    io.UnrolledInit.bits.OutStmtStart := UnrollSegments(last).remainder
+    io.UnrolledInit.bits.OutStmtStart := UnrollSegments(last).remainder // this is currently giving us error
     io.UnrolledInit.bits.RegInitValues(last) := UnrollSegments(last).index.bits
     UnrollSegments(last).inValue.bits := Mux(singleLoop,  access_num, UnrollSegments(last - 1).remainder)
     UnrollSegments(last).inValue.valid := Mux(singleLoop, io.AddressIn.fire, UnrollSegments(last - 1).index.valid)
