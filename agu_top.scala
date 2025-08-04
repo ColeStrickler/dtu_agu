@@ -67,6 +67,11 @@ class AGUTop(params : AGUParams)(implicit p: Parameters) extends LazyModule
 
         })
 
+        when (io.reqIO.offsetAddrFromBase.fire)
+        {
+            SynthesizePrintf("[AGUTop] io.reqIO.offsetAddrFromBase.fire 0x%x\n", io.reqIO.offsetAddrFromBase.bits)
+        }
+
         /*
             General configuration 
         */
@@ -291,7 +296,7 @@ class AGUTop(params : AGUParams)(implicit p: Parameters) extends LazyModule
         // if we pass in the last one for gen, we can take anbother
         datapath_active := Mux(datapath_active, !(sentForGen === (toGen-1.U) && readyNewGen), unroll_unit.io.UnrolledInit.fire)  
         readyNewGen := datapath_active && !stallLayers(0)
-        sentForGen := sentForGen + readyNewGen // dataflow architecture should take input every time if not stalled
+        sentForGen := Mux(datapath_active, sentForGen + readyNewGen, 0.U) // dataflow architecture should take input every time if not stalled
 
 
         // shift in valid signal
