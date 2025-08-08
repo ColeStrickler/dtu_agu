@@ -300,7 +300,16 @@ class AGUTop(params : AGUParams)(implicit p: Parameters) extends LazyModule
 
 
         // shift in valid signal
-        validAtLayer := readyNewGen +: validAtLayer.init // we will shift in falses here by definition
+        //validAtLayer := readyNewGen +: validAtLayer.init // we will shift in falses here by definition
+
+        validAtLayer(0) := Mux(stallLayers(0), validAtLayer(0), readyNewGen)
+        for (i <- 1 until validAtLayer.length)
+        {
+            validAtLayer(i) := Mux(stallLayers(i), validAtLayer(i), validAtLayer(i-1))
+        }
+        
+
+
         // shift in current outStatement
         outStatementAtLayer := currentOutStatement +: outStatementAtLayer.init
 
@@ -400,6 +409,11 @@ class AGUTop(params : AGUParams)(implicit p: Parameters) extends LazyModule
         }
         dpath.io.StallLayer := stallLayers
 
+
+        when (stallLayers(stallLayers.length-1))
+        {
+            SynthesizePrintf("STALL AGU DATAPATH\n")
+        }
 
         /*
             We moved this control to datapath_active
