@@ -9,14 +9,23 @@ import midas.targetutils.SynthesizePrintf
 
 
 
-class LayerRouter(nInputs: Int, nOutputs: Int, outputSize : Int, bitwidth: Int, maxOutputs: Int, layer: Int) extends Module 
+class LayerRouter(params: AGUParams, nInputs: Int, nOutputs: Int, outputSize : Int, bitwidth: Int, maxOutputs: Int, layer: Int) extends Module 
 {
 
+    val NULL_ROUTE : Int = {
+        val totalFuncUnits = params.nAdd + params.nMult + params.nPassthru
+        val bits = log2Ceil(totalFuncUnits)
+        if (math.pow(2, bits)-1 == totalFuncUnits)
+            (math.pow(2,bits+1)-1).toInt
+        else
+            (math.pow(2, bits)-1).toInt
+    }
+    val routerRegBitsNeeded = log2Ceil(NULL_ROUTE)
     
     val io = IO(new Bundle{
         val inputs = Input(Vec(nInputs, UInt(bitwidth.W)))
         val outputs = Output(Vec(nOutputs, Vec(outputSize, UInt(bitwidth.W))))
-        val routing = Input(Vec(nInputs, Vec(maxOutputs, UInt(8.W)))) // we need to map multiple inputs to each output
+        val routing = Input(Vec(nInputs, Vec(maxOutputs, UInt(routerRegBitsNeeded.W)))) // we need to map multiple inputs to each output
         val stall = Input(Bool())
     })
 
@@ -64,7 +73,7 @@ class LayerRouter(nInputs: Int, nOutputs: Int, outputSize : Int, bitwidth: Int, 
         for (j <- 0 until maxOutputs)
         {
             val sel_output = io.routing(i)(j)
-            when (sel_output =/= Constants.NULL_ROUTE.U) // this is default value
+            when (sel_output =/= NULL_ROUTE.U) // this is default value
             {
                 val current_index = index(i)(sel_output)
                 assert(current_index < outputSize.U)

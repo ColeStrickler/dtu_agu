@@ -6,15 +6,29 @@ import chisel3.util._
 import firrtl.options.TargetDirAnnotation
 import midas.targetutils.SynthesizePrintf
 
-class AGUDatapath(nLoopRegs : Int, nConstRegs: Int, nLayers: Int, nMultUnits: Int, nAddUnits: Int, nPassthru: Int, maxVarOutputs: Int) extends Module
+class AGUDatapath(params: AGUParams, nLoopRegs : Int, nConstRegs: Int, nLayers: Int, nMultUnits: Int, nAddUnits: Int, nPassthru: Int, maxVarOutputs: Int) extends Module
 {
+
+    val NULL_ROUTE : Int = {
+        val totalFuncUnits = params.nAdd + params.nMult + params.nPassthru
+        val bits = log2Ceil(totalFuncUnits)
+        if (math.pow(2, bits)-1 == totalFuncUnits)
+            (math.pow(2,bits+1)-1).toInt
+        else
+            (math.pow(2, bits)-1).toInt
+    }
+    val routerRegBitsNeeded = log2Ceil(NULL_ROUTE)
+
+
+
+
     val bitwidth = 32
     val totalFuncUnits = nAddUnits + nMultUnits + nPassthru
     val io = IO(new Bundle{
         val doGen = Input(Bool())
         val output = Output(UInt(bitwidth.W))
         val reset = Input(Bool())
-        val RoutingConfigIn = Input(Vec(nLayers+1, Vec(totalFuncUnits, Vec(maxVarOutputs, UInt(8.W)))))
+        val RoutingConfigIn = Input(Vec(nLayers+1, Vec(totalFuncUnits, Vec(maxVarOutputs, UInt(routerRegBitsNeeded.W)))))
         val StallLayer = Input(Vec(nLayers+1, Bool()))
 
 
@@ -83,7 +97,7 @@ class AGUDatapath(nLoopRegs : Int, nConstRegs: Int, nLayers: Int, nMultUnits: In
     val routing = VecInit(
         (0 to nLayers).map { layerIdx =>
             val nUnits = nAddUnits + nMultUnits + nPassthru
-            val router = Module(new LayerRouter(nUnits, nUnits, 2, 32, maxVarOutputs, layerIdx)) // you can pass layerIdx if needed
+            val router = Module(new LayerRouter(params, nUnits, nUnits, 2, 32, maxVarOutputs, layerIdx)) // you can pass layerIdx if needed
             router.io
         }
     )

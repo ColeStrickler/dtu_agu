@@ -23,9 +23,6 @@ import mainargs.TokensReader.Constant
 
 */
 
-object Constants {
-  final val NULL_ROUTE = 255
-}
 
 
 
@@ -48,6 +45,22 @@ case class AGUParams
 
 class AGUTop(params : AGUParams)(implicit p: Parameters) extends LazyModule 
 {
+
+
+    /*
+        Compute parameterization. Will be used elsewhere
+    */
+    val NULL_ROUTE : Int = {
+        val totalFuncUnits = params.nAdd + params.nMult + params.nPassthru
+        val bits = log2Ceil(totalFuncUnits)
+        if (math.pow(2, bits)-1 == totalFuncUnits)
+            (math.pow(2,bits+1)-1).toInt
+        else
+            (math.pow(2, bits)-1).toInt
+    }
+    val routerRegBitsNeeded = log2Ceil(NULL_ROUTE)
+
+
     val CacheLineSizeBytes = 64.U // bytes
     val device = new SimpleDevice("dtlagu",Seq("ku-csl,dtlagu"))
 
@@ -115,10 +128,15 @@ class AGUTop(params : AGUParams)(implicit p: Parameters) extends LazyModule
 
 
             Initialize to 255 so they are ignored by router
+
+
+
+            We can cut the size of this in half if we set width of each register to log2ceil(totalFucncUnits)
+            I also believe we can cut maxVarOutputs to 2
         */
         val RoutingConfig = RegInit(VecInit(Seq.fill(params.maxOutStatements)(
                                         VecInit(Seq.fill(params.nLayers+1)(
-                                            VecInit(Seq.fill(totalFuncUnits)(VecInit(Seq.fill(params.maxVarOutputs)(Constants.NULL_ROUTE.U(8.W))))))))))
+                                            VecInit(Seq.fill(totalFuncUnits)(VecInit(Seq.fill(params.maxVarOutputs)(NULL_ROUTE.U(routerRegBitsNeeded.W))))))))))
         
 
 
@@ -140,7 +158,7 @@ class AGUTop(params : AGUParams)(implicit p: Parameters) extends LazyModule
                 for (k <- 0 until totalFuncUnits) {
                     for (l <- 0 until params.maxVarOutputs)
                     {
-                        mmregBuf += (cell -> Seq(RegField(bytesPerCell*8, RoutingConfig(i)(j)(k)(l), RegFieldDesc("agurouting", "agurouting"))))
+                        mmregBuf += (cell -> Seq(RegField(routerRegBitsNeeded, RoutingConfig(i)(j)(k)(l), RegFieldDesc("agurouting", "agurouting"))))
                         cell += 1
                     }
                 }
@@ -351,7 +369,7 @@ class AGUTop(params : AGUParams)(implicit p: Parameters) extends LazyModule
         {
             SynthesizePrintf("configReset=true\n")
             // zero all routing config
-            RoutingConfig.foreach(i => i.foreach(j => j.foreach(k => k.foreach(l => l := Constants.NULL_ROUTE.U))))// ignore value
+            RoutingConfig.foreach(i => i.foreach(j => j.foreach(k => k.foreach(l => l := NULL_ROUTE.U))))// ignore value
 
             
             // invalidate all layers
@@ -359,7 +377,7 @@ class AGUTop(params : AGUParams)(implicit p: Parameters) extends LazyModule
         }
 
 
-        val dpath = Module(new AGUDatapath(params.nLoopRegs, params.nConstRegs, params.nLayers, params.nMult, params.nAdd, params.nPassthru, params.maxVarOutputs))
+        val dpath = Module(new AGUDatapath(params, params.nLoopRegs, params.nConstRegs, params.nLayers, params.nMult, params.nAdd, params.nPassthru, params.maxVarOutputs))
         
 
         dpath.io.doGen := readyNewGen
