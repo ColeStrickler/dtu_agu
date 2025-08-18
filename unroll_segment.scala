@@ -32,13 +32,14 @@ class UnrollSegment32(index: Int) extends Module
 
     val reg = RegInit(0.U(32.W))
     val remreg = RegInit(0.U(32.W))
-    val vreg = RegInit(false.B)
+    val vreg_1 = RegInit(false.B)
+    val vreg_2 = RegInit(false.B)
     val mul = Wire(UInt(64.W))
     val int_mag_res = Wire(UInt(32.W))
-    val magic_res = Wire(UInt(32.W))
+    val magic_res = Reg(UInt(32.W))
     mul := io.inValue.bits * io.magic.M
     int_mag_res := (mul >> 32)
-
+    vreg_2 := vreg_1
 
     when (io.magic.add_indicator)
     {
@@ -52,7 +53,8 @@ class UnrollSegment32(index: Int) extends Module
     when(io.rst)
     {
         reg := 0.U
-        vreg := false.B
+        vreg_1 := false.B
+        vreg_2 := false.B
         remreg := 0.U
         SynthesizePrintf("[UnrollSegment32_%d] io.inValue.valid, bits %d\n", index.U, io.inValue.bits)
         SynthesizePrintf("[UnrollSegment32_%d] M %d, S %d, add_indicator %d\n", index.U, io.magic.M, io.magic.s, io.magic.add_indicator)
@@ -60,14 +62,22 @@ class UnrollSegment32(index: Int) extends Module
     }
     .elsewhen(io.inValue.valid)
     {
+        vreg_1 := io.inValue.valid
+    }
+
+
+    /* 
+        We break up the multiplications into two stages
+    */
+    when (vreg_1)
+    {
         reg := magic_res
-        vreg := io.inValue.valid
         remreg := (io.inValue.bits - (magic_res*io.magic.stride))
     }
 
 
 
-    io.index.valid := vreg
+    io.index.valid := vreg_2
     io.index.bits := reg
     io.remainder := remreg
 }
