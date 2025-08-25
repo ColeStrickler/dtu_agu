@@ -32,10 +32,10 @@ class AGUDatapath(params: AGUParams, nLoopRegs : Int, nConstRegs: Int, nLayers: 
         val StallLayer = Input(Vec(nLayers+1, Bool()))
 
 
-
-        val LoopRegsIn =        Input(Vec(nLoopRegs, UInt(bitwidth.W)))
-        val LoopIncRegsIn =     Input(Vec(nLoopRegs, UInt(bitwidth.W)))
-        val ConstantRegsIn =    Input(Vec(nConstRegs, UInt(bitwidth.W)))
+        val LoopRegsIn =            Input(Vec(nLoopRegs, UInt(bitwidth.W)))
+        val LoopIncRegsIn =         Input(Vec(nLoopRegs, UInt(bitwidth.W)))
+        val ConstantRegsIn =        Input(Vec(nConstRegs, UInt(bitwidth.W)))
+        val ConstantArrayRegIn =    Input(Vec(params.nConstArray, UInt(bitwidth.W)))
     })
 
     /*
@@ -44,9 +44,11 @@ class AGUDatapath(params: AGUParams, nLoopRegs : Int, nConstRegs: Int, nLayers: 
     val LoopRegs = Wire(Vec(nLoopRegs, UInt(bitwidth.W)))
     val LoopIncRegs = Wire(Vec(nLoopRegs, UInt(bitwidth.W)))
     val ConstantRegs = Wire(Vec(nConstRegs, UInt(bitwidth.W)))
+    val ConstantArrayRegs = Wire(Vec(params.nConstArray, UInt(bitwidth.W)))
     LoopRegs := io.LoopRegsIn
     LoopIncRegs := io.LoopIncRegsIn
     ConstantRegs := io.ConstantRegsIn
+    ConstantArrayRegs := io.ConstantArrayRegIn
 
 
     when (io.doGen)
@@ -61,6 +63,11 @@ class AGUDatapath(params: AGUParams, nLoopRegs : Int, nConstRegs: Int, nLayers: 
         for (i <- 0 until nConstRegs)
         {
             SynthesizePrintf("constReg(%d) %d\n", i.U, ConstantRegs(i))
+        }
+
+        for (i <- 0 until params.nConstArray)
+        {
+            SynthesizePrintf("constArrayReg(%d) %d\n", i.U, ConstantArrayRegs(i))
         }
     }
 
@@ -123,9 +130,16 @@ class AGUDatapath(params: AGUParams, nLoopRegs : Int, nConstRegs: Int, nLayers: 
     {
         routing(0).inputs(i) := ConstantRegs(i)
     }
+
+    for (i <- 0 until params.nConstArray)
+    {
+        routing(0).inputs(i + nConstRegs) := ConstantArrayRegs(i)
+    }
+
+
     for (i <- 0 until nLoopRegs)
     {
-        routing(0).inputs(i + nConstRegs) := LoopRegs(i)
+        routing(0).inputs(i + nConstRegs + params.nConstArray) := LoopRegs(i)
     }
 
     

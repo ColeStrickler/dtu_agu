@@ -24,8 +24,6 @@ import mainargs.TokensReader.Constant
 */
 
 
-
-
 case class AGUParams
 (
     maxOutStatements: Int = 3,
@@ -35,12 +33,13 @@ case class AGUParams
     bitwidth : Int = 32,
     nPassthru : Int = 4,
     nLoopRegs : Int = 6,
-    nConstRegs : Int = 6,
+    nConstRegs : Int = 5,
+    nConstArray : Int = 1,
+    nConstArraySize : Int = 32,
     regAddress : Int = 0x4000000,
     controlBeatBytes : Int = 8,
     maxVarOutputs : Int = 4
 )
-
 
 
 class AGUTop(params : AGUParams)(implicit p: Parameters) extends LazyModule 
@@ -59,7 +58,7 @@ class AGUTop(params : AGUParams)(implicit p: Parameters) extends LazyModule
             (math.pow(2, bits)-1).toInt
     }
     val routerRegBitsNeeded = log2Ceil(NULL_ROUTE)
-
+    def alignTo8(x: Int): Int = ((x + 7) / 8) * 8
 
     val CacheLineSizeBytes = 64.U // bytes
     val device = new SimpleDevice("dtlagu",Seq("ku-csl,dtlagu"))
@@ -69,7 +68,7 @@ class AGUTop(params : AGUParams)(implicit p: Parameters) extends LazyModule
         device      = device,
         concurrency = 1, // Only one flush at a time (else need to track who answers)
         beatBytes   = params.controlBeatBytes)
-
+    
 
     lazy val module = new Impl
     class Impl extends LazyModuleImp(this) {
@@ -98,6 +97,14 @@ class AGUTop(params : AGUParams)(implicit p: Parameters) extends LazyModule
         val magic_reg_AddInidicator = RegInit(VecInit(Seq.fill(params.nLoopRegs)(false.B)))
 
         
+        assert(params.nConstArraySize <= 255) // we aren't allowing for more rn
+        val constArrayValues = RegInit(VecInit(Seq.fill(params.nConstArray)(VecInit(Seq.fill(params.nConstArraySize)(0.U(32.W))))))
+        val constArrayIndexSelector = RegInit(VecInit(Seq.fill(params.nConstArray)(0.U(8.W))))
+        val constArraySelected = WireInit(VecInit(Seq.fill(params.nConstArray)(0.U(32.W))))
+        
+        
+
+
 
 
         /*
@@ -179,16 +186,26 @@ class AGUTop(params : AGUParams)(implicit p: Parameters) extends LazyModule
         /*
             We need an nLoopRegs used register to use with the unroll_unit?
         */
-        val LoopRegs = Seq.fill(params.nLoopRegs)(RegInit(0.U(params.bitwidth.W)))
-        val LoopIncRegs = Seq.fill(params.nLoopRegs)(RegInit(0.U(params.bitwidth.W)))
-        val ConstantRegs = Seq.fill(params.nConstRegs)(RegInit(0.U(params.bitwidth.W)))
-        val StrideRegs = Seq.fill(params.nLoopRegs)(RegInit(0.U(32.W)))
+        val LoopRegs =      RegInit(VecInit(Seq.fill(params.nLoopRegs)(0.U(params.bitwidth.W))))
+        val LoopIncRegs =   RegInit(VecInit(Seq.fill(params.nLoopRegs)(0.U(params.bitwidth.W))))
+        val ConstantRegs =  RegInit(VecInit(Seq.fill(params.nConstRegs)(0.U(params.bitwidth.W))))
+        val StrideRegs =    RegInit(VecInit(Seq.fill(params.nLoopRegs)(0.U(32.W))))
+
+        // this will make a mux tree that will use the loop index to bring in the value
+        for (i <- 0 until params.nConstArray)
+        {
+            constArraySelected(i) := constArrayValues(i)(LoopRegs(constArrayIndexSelector(i)))
+        }
+
+
 
 
         /*
             probably want to do this better for power efficiency later on, maybe trigger on a write function to mmio register
             but this will suffice for now
             may even want to map this in mmio? and handle writes with compiler, idk
+
+            We definitely want to put this into compiler
         */
         val stride = VecInit(Seq.fill(params.nLoopRegs)(0.U(32.W)))
         stride(0) := usedOutStatements
@@ -254,7 +271,10 @@ class AGUTop(params : AGUParams)(implicit p: Parameters) extends LazyModule
         val bytesUsedIncLoop =  bytesPerLoop * params.nLoopRegs 
         val offsetConstRegs =   bytesUsedRouting+bytesUsedForLoop+bytesUsedIncLoop
         val bytesUsedConst =    params.nConstRegs*bytesPerConst
-        val offsetMagicRegs =   offsetConstRegs+bytesUsedConst
+        val offsetConstArray = offsetConstRegs+bytesUsedConst
+        val bytesPerConstArray = (params.nConstArraySize*4 + 8) 
+        val bytesUsedConstArray = params.nConstArray*bytesPerConstArray// # array * (nregister + selector)
+        val offsetMagicRegs =   alignTo8(offsetConstRegs+bytesUsedConst+bytesUsedConstArray)
         val bytesPerMagic =     16 // m(4), s(4), add_indicator(4) --> we give whole word even tho it is just bool
         assert(offsetMagicRegs < 0xf00, "offset magic regs < 0xf00")
         for (i <- 0 until params.nLoopRegs) // Loop registers immediately after routing cells
@@ -265,6 +285,15 @@ class AGUTop(params : AGUParams)(implicit p: Parameters) extends LazyModule
         for (i <- 0 until params.nConstRegs)
         {
             mmregBuf += ((offsetConstRegs + i*bytesPerConst) -> Seq(RegField(params.bitwidth, ConstantRegs(i), RegFieldDesc("constreg", "constreg"))))
+        }
+
+        for (i <- 0 until params.nConstArray)
+        {
+            for (j <- 0 until params.nConstArraySize)
+            {
+                mmregBuf += (((offsetConstArray + i*bytesPerConstArray + j*4) ->Seq(RegField(32, constArrayValues(i)(j), RegFieldDesc("constArrVal", "constArrVal")))))
+            }
+            mmregBuf += (((offsetConstArray + i*bytesPerConstArray + params.nConstArraySize*4) ->Seq(RegField(8, constArrayIndexSelector(i), RegFieldDesc("constArrIndexSel", "constArrIndexSel")))))
         }
 
         for (i <- 0 until params.nLoopRegs)
@@ -385,6 +414,9 @@ class AGUTop(params : AGUParams)(implicit p: Parameters) extends LazyModule
         dpath.io.ConstantRegsIn := ConstantRegs
         dpath.io.LoopIncRegsIn := LoopIncRegs
         dpath.io.LoopRegsIn := LoopRegs
+        dpath.io.ConstantArrayRegIn := constArraySelected
+
+
 
 
 
