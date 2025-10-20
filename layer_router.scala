@@ -65,22 +65,22 @@ class LayerRouter(params: AGUParams, nInputs: Int, nOutputs: Int, outputSize : I
     // Route each output from the input specified in routing
     for (i <- 0 until nInputs) {
         
-        for (x <- 0 until nOutputs) // default just pass ahead
-        {
-            index(i+1)(x) := index(i)(x)
-        }
-
         for (j <- 0 until maxOutputs)
         {
             val sel_output = io.routing(i)(j)
             when (sel_output =/= NULL_ROUTE.U) // this is default value
             {
                 val current_index = index(i)(sel_output)
+
+                val idx = (0 until i+1).map(k =>
+                     (0 until j+1).map{x => io.routing(k)(x) === sel_output}.map(b => b.asUInt).reduce(_ + _)
+                ).reduce(_ +  _)
+
+
                 assert(current_index < outputSize.U)
                 //SynthesizePrintf("[Layer%d] input%d (%d) -> output(%d) stall=%d index %d\n", layer.U, i.U, buffer(i), sel_output, io.stall, index(i)(sel_output))
 
-                io.outputs(sel_output)(current_index) := buffer(i)//io.inputs(i)
-                index(i+1)(sel_output) := index(i)(sel_output) + 1.U
+                io.outputs(sel_output)(idx) := buffer(i)//io.inputs(i)
             }
         }      
     }
