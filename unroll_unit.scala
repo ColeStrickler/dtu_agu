@@ -55,11 +55,11 @@ class UnrollUnit(params: AGUParams) extends Module
     when(io.AddressIn.fire)
     {
 
-        SynthesizePrintf("[UnrollUnit] io.AddressIn.fire 0x%x loopsUsed %d, data size %d, ENTRY: %d\n", io.AddressIn.bits, io.nForLoopsActive, io.DataSize, entry)
+       // SynthesizePrintf("[UnrollUnit] io.AddressIn.fire 0x%x loopsUsed %d, data size %d, ENTRY: %d\n", io.AddressIn.bits, io.nForLoopsActive, io.DataSize, entry)
         /*
             This shouldn't happen since we are asserting only power of 2
         */
-        SynthesizePrintf("shift_divider.io.remainder === 0.U %d, remainder: %d\n", shift_divider.io.remainder === 0.U, shift_divider.io.remainder)
+        //SynthesizePrintf("shift_divider.io.remainder === 0.U %d, remainder: %d\n", shift_divider.io.remainder === 0.U, shift_divider.io.remainder)
     }
 
 
@@ -124,7 +124,7 @@ class UnrollUnit(params: AGUParams) extends Module
             UnrollSegments(i).inValue.valid := io.AddressIn.valid
             when(io.AddressIn.valid)
             {
-                 SynthesizePrintf("Here\n")
+               //  SynthesizePrintf("Here\n")
             }
            
         }

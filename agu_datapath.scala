@@ -53,21 +53,21 @@ class AGUDatapath(params: AGUParams, nLoopRegs : Int, nConstRegs: Int, nLayers: 
 
     when (io.doGen)
     {
-        SynthesizePrintf("[AGUDatapath] io.doGen %d\n", io.doGen)
+       // SynthesizePrintf("[AGUDatapath] io.doGen %d\n", io.doGen)
         for (i <- 0 until nLoopRegs)
         {
-            SynthesizePrintf("loopreg(%d) %d\n", i.U, LoopRegs(i))
-            SynthesizePrintf("loopincreg(%d) %d\n", i.U, LoopIncRegs(i))
+         //   SynthesizePrintf("loopreg(%d) %d\n", i.U, LoopRegs(i))
+         //   SynthesizePrintf("loopincreg(%d) %d\n", i.U, LoopIncRegs(i))
         }
 
         for (i <- 0 until nConstRegs)
         {
-            SynthesizePrintf("constReg(%d) %d\n", i.U, ConstantRegs(i))
+           // SynthesizePrintf("constReg(%d) %d\n", i.U, ConstantRegs(i))
         }
 
         for (i <- 0 until params.nConstArray)
         {
-            SynthesizePrintf("constArrayReg(%d) %d\n", i.U, ConstantArrayRegs(i))
+           // SynthesizePrintf("constArrayReg(%d) %d\n", i.U, ConstantArrayRegs(i))
         }
     }
 

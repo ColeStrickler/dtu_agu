@@ -42,7 +42,7 @@ case class AGUParams
 )
 
 
-class AGUTop(params : AGUParams)(implicit p: Parameters) extends LazyModule 
+class AGUTop(params : AGUParams, config: Int = 0)(implicit p: Parameters) extends LazyModule 
 {
 
 
@@ -64,7 +64,7 @@ class AGUTop(params : AGUParams)(implicit p: Parameters) extends LazyModule
     val device = new SimpleDevice("dtlagu",Seq("ku-csl,dtlagu"))
 
     val ctlnode = TLRegisterNode(
-        address     = Seq(AddressSet(params.regAddress, 0xfff)),
+        address     = Seq(AddressSet(params.regAddress + 0x1000*config, 0xfff)),
         device      = device,
         concurrency = 1, // Only one flush at a time (else need to track who answers)
         beatBytes   = params.controlBeatBytes)
@@ -87,7 +87,7 @@ class AGUTop(params : AGUParams)(implicit p: Parameters) extends LazyModule
         /*
             General configuration 
         */
-        val nOutStatements = RegInit(0.U(log2Ceil(params.maxOutStatements).W))
+        val nOutStatements = RegInit(1.U(log2Ceil(params.maxOutStatements).W))
         val usedOutStatements = RegInit(0.U(log2Ceil(params.maxOutStatements).W))
         val usedForLoops = RegInit(0.U(log2Ceil(params.nLoopRegs).W))
         val config_reset = RegInit(false.B)
@@ -159,6 +159,7 @@ class AGUTop(params : AGUParams)(implicit p: Parameters) extends LazyModule
         */
         var cell = 0
         val bytesPerCell = 1
+        val totalRegSize = 0x1000
         val mmregBuf = ArrayBuffer[(Int, Seq[RegField])]()
         for (i <- 0 until params.maxOutStatements) {
             for (j <- 0 until params.nLayers+1) {
@@ -206,8 +207,10 @@ class AGUTop(params : AGUParams)(implicit p: Parameters) extends LazyModule
             may even want to map this in mmio? and handle writes with compiler, idk
 
             We definitely want to put this into compiler
+            --> or just use registers? this should be fine
+            --> we made a change here, haven't yet made sure it will work
         */
-        val stride = VecInit(Seq.fill(params.nLoopRegs)(0.U(32.W)))
+        val stride = RegInit(VecInit(Seq.fill(params.nLoopRegs)(0.U(32.W))))
         stride(0) := usedOutStatements
         for (i <- 1 until params.nLoopRegs)
         {
@@ -377,10 +380,10 @@ class AGUTop(params : AGUParams)(implicit p: Parameters) extends LazyModule
 
         when (readyNewGen)
         {
-            SynthesizePrintf("CurrentOutStatement %d, usedOutStatement %d\n", currentOutStatement, usedOutStatements)
+           // SynthesizePrintf("CurrentOutStatement %d, usedOutStatement %d\n", currentOutStatement, usedOutStatements)
             for (i <- 0 until params.nLoopRegs)
             {
-                SynthesizePrintf("loopReg(%d) %d\n", i.U, LoopRegs(i))
+             //   SynthesizePrintf("loopReg(%d) %d\n", i.U, LoopRegs(i))
             }
         }
         
