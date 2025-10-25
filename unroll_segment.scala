@@ -56,9 +56,9 @@ class UnrollSegment32(index: Int) extends Module
         vreg_1 := false.B
         vreg_2 := false.B
         remreg := 0.U
-        SynthesizePrintf("[UnrollSegment32_%d] io.inValue.valid, bits %d\n", index.U, io.inValue.bits)
-        SynthesizePrintf("[UnrollSegment32_%d] M %d, S %d, add_indicator %d\n", index.U, io.magic.M, io.magic.s, io.magic.add_indicator)
-        SynthesizePrintf("[UnrollSegment32_%d] Reg %d, remreg %d\n", index.U, reg, remreg)
+       // SynthesizePrintf("[UnrollSegment32_%d] io.inValue.valid, bits %d\n", index.U, io.inValue.bits)
+        //SynthesizePrintf("[UnrollSegment32_%d] M %d, S %d, add_indicator %d\n", index.U, io.magic.M, io.magic.s, io.magic.add_indicator)
+       // SynthesizePrintf("[UnrollSegment32_%d] Reg %d, remreg %d\n", index.U, reg, remreg)
     }
     .elsewhen(io.inValue.valid)
     {

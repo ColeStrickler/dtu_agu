@@ -73,16 +73,14 @@ class LayerRouter(params: AGUParams, nInputs: Int, nOutputs: Int, outputSize : I
                 val idx = (0 until i+1).map(k =>
                      (0 until j+1).map{x => io.routing(k)(x) === sel_output}.map(b => b.asUInt).reduce(_ + _)
                 ).reduce(_ +  _) - 1.U
-                when (idx >= 2.U)
+                io.outputs(sel_output)(idx) := buffer(i)//io.inputs(i)
+
+                 when (idx >= 2.U)
                 {
                     SynthesizePrintf("idx > 2 (%d)(%d) == %d", i.U, j.U, sel_output)
                     assert(false.B)
                     
                 }
-                //assert(current_index < outputSize.U)
-                //SynthesizePrintf("[Layer%d] input%d (%d) -> output(%d) stall=%d index %d\n", layer.U, i.U, buffer(i), sel_output, io.stall, index(i)(sel_output))
-
-                io.outputs(sel_output)(idx) := buffer(i)//io.inputs(i)
             }
         }      
     }

@@ -38,7 +38,7 @@ case class AGUParams
     nConstArraySize : Int = 32,
     regAddress : Int = 0x4000000,
     controlBeatBytes : Int = 8,
-    maxVarOutputs : Int = 4
+    maxVarOutputs : Int = 4,
 )
 
 
@@ -399,7 +399,7 @@ class AGUTop(params : AGUParams, config: Int = 0)(implicit p: Parameters) extend
 
         when (config_reset)
         {
-            SynthesizePrintf("configReset=true\n")
+           // SynthesizePrintf("configReset=true\n")
             // zero all routing config
             RoutingConfig.foreach(i => i.foreach(j => j.foreach(k => k.foreach(l => l := NULL_ROUTE.U))))// ignore value
 

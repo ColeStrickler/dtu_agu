@@ -172,11 +172,11 @@ class UnrollUnit(params: AGUParams) extends Module
 
     when (AllIndicesValid)
     {
-        SynthesizePrintf("WorkingAddr 0x%x, Working access_num %d\n", debug_addr_reg, debug_div_reg)
+       // SynthesizePrintf("WorkingAddr 0x%x, Working access_num %d\n", debug_addr_reg, debug_div_reg)
         for (i <- 0 until IndicesValidOut.size)
         {       
-            SynthesizePrintf("IndicesValidOut(%d): %d\n", i.U, IndicesValidOut(i))
-            SynthesizePrintf("UnrollSegments(%d).index.bits %d\n", i.U, UnrollSegments(i).index.bits)
+           // SynthesizePrintf("IndicesValidOut(%d): %d\n", i.U, IndicesValidOut(i))
+           // SynthesizePrintf("UnrollSegments(%d).index.bits %d\n", i.U, UnrollSegments(i).index.bits)
         }
     }
 
