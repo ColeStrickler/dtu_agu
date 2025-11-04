@@ -23,7 +23,7 @@ class ShiftDivider(bitwidth: Int) extends Module
     /*
         We can avoid a division here if we enforce power of 2 data_size, which is reasonable
     */
-    val allowedSizes = Seq(1, 2, 4, 8, 16, 32).map(_.U(bitwidth.W))
+    val allowedSizes = Seq(1, 2, 4, 8, 16, 32, 64).map(_.U(bitwidth.W))
     val isPowerOf2 = io.data_size.bits =/= 0.U && (io.data_size.bits & (io.data_size.bits - 1.U)) === 0.U
     val isAllowedValue = allowedSizes.map(_ === io.data_size.bits).reduce(_ || _)
 
@@ -44,6 +44,7 @@ class ShiftDivider(bitwidth: Int) extends Module
         is(8.U)   { res := (io.addr_in >> 3.U) }
         is(16.U)  { res := (io.addr_in >> 4.U) }
         is(32.U)  { res := (io.addr_in >> 5.U) }
+        is(64.U)  { res := (io.addr_in >> 6.U) }
     }
 
     rem := io.addr_in - res

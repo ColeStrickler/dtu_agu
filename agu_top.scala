@@ -230,6 +230,7 @@ class AGUTop(params : AGUParams, config: Int = 0)(implicit p: Parameters) extend
             unroll_unit.io.MagicNumbers(i).s :=                 magic_reg_S(i)
             unroll_unit.io.MagicNumbers(i).add_indicator :=     magic_reg_AddInidicator(i).asBool
             unroll_unit.io.MagicNumbers(i).stride :=            stride(params.nLoopRegs-1-i)
+            
         }
 
         val datapath_active = RegInit(false.B)
@@ -440,6 +441,9 @@ class AGUTop(params : AGUParams, config: Int = 0)(implicit p: Parameters) extend
             LoopRegs.foreach(r => r := 0.U)
             LoopIncRegs.foreach(r => r := 0.U)
             ConstantRegs.foreach(r => r := 0.U)
+            magic_reg_AddInidicator.foreach(r => r:= false.B)
+            magic_reg_M.foreach(r => r := 0.U)
+            magic_reg_S.foreach(r => r := 0.U)
         }
 
 
