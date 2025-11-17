@@ -26,7 +26,7 @@ import mainargs.TokensReader.Constant
 
 case class AGUParams
 (
-    maxOutStatements: Int = 3,
+    maxOutStatements: Int = 1,
     nLayers: Int = 5,
     nAdd : Int = 4,
     nMult : Int = 4,
@@ -38,7 +38,7 @@ case class AGUParams
     nConstArraySize : Int = 32,
     regAddress : Int = 0x4000000,
     controlBeatBytes : Int = 8,
-    maxVarOutputs : Int = 4,
+    maxVarOutputs : Int = 2,
 )
 
 
@@ -87,8 +87,8 @@ class AGUTop(params : AGUParams, config: Int = 0)(implicit p: Parameters) extend
         /*
             General configuration 
         */
-        val nOutStatements = RegInit(1.U(log2Ceil(params.maxOutStatements).W))
-        val usedOutStatements = RegInit(0.U(log2Ceil(params.maxOutStatements).W))
+        val nOutStatements = RegInit(1.U(log2Ceil(params.maxOutStatements+1).W))
+        val usedOutStatements = RegInit(0.U(log2Ceil(params.maxOutStatements+1).W))
         val usedForLoops = RegInit(0.U(log2Ceil(params.nLoopRegs).W))
         val config_reset = RegInit(false.B)
 
@@ -330,7 +330,7 @@ class AGUTop(params : AGUParams, config: Int = 0)(implicit p: Parameters) extend
         */
         val currentOutStatement = RegInit(0.U(8.W)) // which out statement do we send down the pipeline
         val readyNewGen = Wire(Bool()) // will we send a new outstatement down the pipeline
-        val outStatementAtLayer = RegInit(VecInit(Seq.fill(params.nLayers+1)(0.U(log2Ceil(params.maxOutStatements).W))))
+        val outStatementAtLayer = RegInit(VecInit(Seq.fill(params.nLayers+1)(0.U(log2Ceil(params.maxOutStatements+1).W))))
         val validAtLayer = RegInit(VecInit(Seq.fill(params.nLayers+1)(false.B)))
         val stallLayers = Wire(Vec(params.nLayers+1, Bool()))
         val lastOutStmt = Wire(Bool())
