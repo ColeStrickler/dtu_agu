@@ -26,14 +26,14 @@ import mainargs.TokensReader.Constant
 
 case class AGUParams
 (
-    maxOutStatements: Int = 1,
+    maxOutStatements: Int = 9,
     nLayers: Int = 5,
     nAdd : Int = 4,
     nMult : Int = 4,
     bitwidth : Int = 32,
     nPassthru : Int = 4,
-    nLoopRegs : Int = 6,
-    nConstRegs : Int = 5,
+    nLoopRegs : Int = 5,
+    nConstRegs : Int = 6,
     nConstArray : Int = 1,
     nConstArraySize : Int = 32,
     regAddress : Int = 0x4000000,
@@ -81,7 +81,7 @@ class AGUTop(params : AGUParams, config: Int = 0)(implicit p: Parameters) extend
 
         when (io.reqIO.offsetAddrFromBase.fire)
         {
-            SynthesizePrintf("[AGUTop] io.reqIO.offsetAddrFromBase.fire 0x%x\n", io.reqIO.offsetAddrFromBase.bits)
+            //SynthesizePrintf("[AGUTop] io.reqIO.offsetAddrFromBase.fire 0x%x\n", io.reqIO.offsetAddrFromBase.bits)
         }
 
         /*
@@ -89,7 +89,7 @@ class AGUTop(params : AGUParams, config: Int = 0)(implicit p: Parameters) extend
         */
         val nOutStatements = RegInit(1.U(log2Ceil(params.maxOutStatements+1).W))
         val usedOutStatements = RegInit(0.U(log2Ceil(params.maxOutStatements+1).W))
-        val usedForLoops = RegInit(0.U(log2Ceil(params.nLoopRegs).W))
+        val usedForLoops = RegInit(1.U(log2Ceil(params.nLoopRegs).W))
         val config_reset = RegInit(false.B)
 
         val magic_reg_M = RegInit(VecInit(Seq.fill(params.nLoopRegs)(0.U(64.W))))
@@ -373,6 +373,7 @@ class AGUTop(params : AGUParams, config: Int = 0)(implicit p: Parameters) extend
         when(unroll_unit.io.UnrolledInit.fire)
         {
             currentOutStatement := unroll_unit.io.UnrolledInit.bits.OutStmtStart
+            //SynthesizePrintf("Using outstmt %d\n", currentOutStatement)
         }
         .elsewhen (readyNewGen) {
             currentOutStatement := (currentOutStatement + 1.U) % usedOutStatements
@@ -469,7 +470,7 @@ class AGUTop(params : AGUParams, config: Int = 0)(implicit p: Parameters) extend
 
         when (stallLayers(stallLayers.length-1))
         {
-            SynthesizePrintf("STALL AGU DATAPATH\n")
+           // SynthesizePrintf("STALL AGU DATAPATH\n")
         }
 
         /*

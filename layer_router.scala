@@ -70,17 +70,29 @@ class LayerRouter(params: AGUParams, nInputs: Int, nOutputs: Int, outputSize : I
             val sel_output = io.routing(i)(j)
             when (sel_output =/= NULL_ROUTE.U) // this is default value
             {
-                val idx = (0 until i+1).map(k =>
-                     (0 until j+1).map{x => io.routing(k)(x) === sel_output}.map(b => b.asUInt).reduce(_ + _)
-                ).reduce(_ +  _) - 1.U
+                val idx = if (i > 0)
+                {
+                    (0 until i).map(k =>
+                     (0 until maxOutputs).map{x => io.routing(k)(x) === sel_output}.map(b => b.asUInt).reduce(_ + _)
+                    ).reduce(_ +  _) + Mux(j.U === 1.U && io.routing(i)(0) === sel_output, 1.U, 0.U)  
+                }
+                else
+                {
+                    Mux(j.U === 1.U && io.routing(i)(0) === sel_output, 1.U, 0.U)
+                }
+                
                 io.outputs(sel_output)(idx) := buffer(i)//io.inputs(i)
 
-                 when (idx >= 2.U)
-                {
-                    SynthesizePrintf("idx > 2 (%d)(%d) == %d", i.U, j.U, sel_output)
-                    assert(false.B)
-                    
-                }
+               // SynthesizePrintf("[Layer%d Router] [%d] %d-%d (idx %d)\n", layer.U, buffer(i), i.U, sel_output, idx)
+                assert(maxOutputs == 2) // our routing logic only works when we have 2
+
+
+                // when (idx >= 2.U)
+                //{
+                //    //SynthesizePrintf("idx > 2 (%d)(%d) == %d", i.U, j.U, sel_output)
+                //    assert(false.B)
+                //    
+                //}
             }
         }      
     }
