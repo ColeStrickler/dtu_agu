@@ -19,9 +19,6 @@ class AGUDatapath(params: AGUParams, nLoopRegs : Int, nConstRegs: Int, nLayers: 
     }
     val routerRegBitsNeeded = log2Ceil(NULL_ROUTE)
 
-
-
-
     val bitwidth = 32
     val totalFuncUnits = nAddUnits + nMultUnits + nPassthru
     val io = IO(new Bundle{
@@ -99,11 +96,10 @@ class AGUDatapath(params: AGUParams, nLoopRegs : Int, nConstRegs: Int, nLayers: 
         }
     )
 
-
+    val nUnits = nAddUnits + nMultUnits + nPassthru
     val PassThru = WireInit(VecInit(Seq.fill(nLayers)(VecInit(Seq.fill(nPassthru)(0.U(bitwidth.W))))))
     val routing = VecInit(
         (0 to nLayers).map { layerIdx =>
-            val nUnits = nAddUnits + nMultUnits + nPassthru
             val router = Module(new LayerRouter(params, nUnits, nUnits, 2, 32, maxVarOutputs, layerIdx)) // you can pass layerIdx if needed
             router.io
         }
@@ -141,6 +137,16 @@ class AGUDatapath(params: AGUParams, nLoopRegs : Int, nConstRegs: Int, nLayers: 
     {
         routing(0).inputs(i + nConstRegs + params.nConstArray) := LoopRegs(i)
     }
+    assert(nLoopRegs + params.nConstArray + nConstRegs <= nUnits)
+    // make sure everything is initialized
+    if (nLoopRegs + params.nConstArray + nConstRegs < nUnits)
+    {
+        for (i <- (nLoopRegs + params.nConstArray + nConstRegs) until nUnits)
+        {
+            routing(0).inputs(i) := NULL_ROUTE.U
+        }
+    }
+
 
     
 

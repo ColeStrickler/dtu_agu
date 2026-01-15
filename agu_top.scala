@@ -26,13 +26,13 @@ import mainargs.TokensReader.Constant
 
 case class AGUParams
 (
-    maxOutStatements: Int = 9,
-    nLayers: Int = 5,
+    maxOutStatements: Int = 1,
+    nLayers: Int = 3,
     nAdd : Int = 4,
     nMult : Int = 4,
     bitwidth : Int = 32,
     nPassthru : Int = 4,
-    nLoopRegs : Int = 5,
+    nLoopRegs : Int = 2,
     nConstRegs : Int = 6,
     nConstArray : Int = 1,
     nConstArraySize : Int = 32,
