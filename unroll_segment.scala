@@ -73,6 +73,7 @@ class UnrollSegment32(index: Int) extends Module
     {
         reg := magic_res
         remreg := (io.inValue.bits - (magic_res*io.magic.stride))
+        SynthesizePrintf("vreg(%d) %d %d\n", index.U, vreg_1, vreg_2)
     }
 
 

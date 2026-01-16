@@ -32,7 +32,7 @@ case class AGUParams
     nMult : Int = 4,
     bitwidth : Int = 32,
     nPassthru : Int = 4,
-    nLoopRegs : Int = 2,
+    nLoopRegs : Int = 5,
     nConstRegs : Int = 6,
     nConstArray : Int = 1,
     nConstArraySize : Int = 32,
@@ -81,7 +81,7 @@ class AGUTop(params : AGUParams, config: Int = 0)(implicit p: Parameters) extend
 
         when (io.reqIO.offsetAddrFromBase.fire)
         {
-            //SynthesizePrintf("[AGUTop] io.reqIO.offsetAddrFromBase.fire 0x%x\n", io.reqIO.offsetAddrFromBase.bits)
+            SynthesizePrintf("[AGUTop] io.reqIO.offsetAddrFromBase.fire 0x%x\n", io.reqIO.offsetAddrFromBase.bits)
         }
 
         /*
@@ -382,7 +382,7 @@ class AGUTop(params : AGUParams, config: Int = 0)(implicit p: Parameters) extend
 
         when (readyNewGen)
         {
-           // SynthesizePrintf("CurrentOutStatement %d, usedOutStatement %d\n", currentOutStatement, usedOutStatements)
+            SynthesizePrintf("CurrentOutStatement %d, usedOutStatement %d\n", currentOutStatement, usedOutStatements)
             for (i <- 0 until params.nLoopRegs)
             {
              //   SynthesizePrintf("loopReg(%d) %d\n", i.U, LoopRegs(i))
