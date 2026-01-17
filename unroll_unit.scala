@@ -1,10 +1,9 @@
 package agu
 
 import chisel3._
-import chisel3.stage.{ChiselStage, ChiselGeneratorAnnotation}
 import chisel3.util._
 import firrtl.options.TargetDirAnnotation
-import midas.targetutils.SynthesizePrintf
+//import midas.targetutils.SynthesizePrintf
 
 
 case class UnrolledInitBundle(params: AGUParams) extends Bundle
@@ -55,7 +54,7 @@ class UnrollUnit(params: AGUParams) extends Module
     when(io.AddressIn.fire)
     {
 
-       SynthesizePrintf("[UnrollUnit] io.AddressIn.fire 0x%x loopsUsed %d, data size %d, ENTRY: %d\n", io.AddressIn.bits, io.nForLoopsActive, io.DataSize, entry)
+     //  SynthesizePrintf("[UnrollUnit] io.AddressIn.fire 0x%x loopsUsed %d, data size %d, ENTRY: %d\n", io.AddressIn.bits, io.nForLoopsActive, io.DataSize, entry)
         /*
             This shouldn't happen since we are asserting only power of 2
         */
@@ -126,7 +125,7 @@ class UnrollUnit(params: AGUParams) extends Module
             UnrollSegments(i).inValue.valid := io.AddressIn.valid
             when(io.AddressIn.valid)
             {
-                 SynthesizePrintf("UnrollUnit io.addressin.valid Here\n")
+               //  SynthesizePrintf("UnrollUnit io.addressin.valid Here\n")
             }
            
         }

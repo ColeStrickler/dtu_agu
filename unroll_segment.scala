@@ -1,10 +1,9 @@
 package agu
 
 import chisel3._
-import chisel3.stage.{ChiselStage, ChiselGeneratorAnnotation}
 import chisel3.util._
 import firrtl.options.TargetDirAnnotation
-import midas.targetutils.SynthesizePrintf
+//import midas.targetutils.SynthesizePrintf
 
 
 case class MagicNumber(bitwidth : Int = 32) extends Bundle
@@ -73,7 +72,7 @@ class UnrollSegment32(index: Int) extends Module
     {
         reg := magic_res
         remreg := (io.inValue.bits - (magic_res*io.magic.stride))
-        SynthesizePrintf("vreg(%d) %d %d\n", index.U, vreg_1, vreg_2)
+      //  SynthesizePrintf("vreg(%d) %d %d\n", index.U, vreg_1, vreg_2)
     }
 
 
