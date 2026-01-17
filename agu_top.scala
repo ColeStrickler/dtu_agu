@@ -2,14 +2,14 @@ package agu
 
 
 import chisel3._
-import chisel3.stage.{ChiselStage, ChiselGeneratorAnnotation}
+//import chisel3.stage.{ChiselStage, ChiselGeneratorAnnotation}
 import chisel3.util._
 import freechips.rocketchip.diplomacy._
 import freechips.rocketchip.tilelink._
 import freechips.rocketchip.tilelink.TLBundleA
 import freechips.rocketchip.regmapper._
 import freechips.rocketchip
-import midas.targetutils.SynthesizePrintf
+//import midas.targetutils.SynthesizePrintf
 import org.chipsalliance.cde.config.{Parameters, Field, Config}
 import scala.collection.mutable.ArrayBuffer
 import subsystem.rme.RequestorAGUPort
@@ -81,7 +81,7 @@ class AGUTop(params : AGUParams, config: Int = 0)(implicit p: Parameters) extend
 
         when (io.reqIO.offsetAddrFromBase.fire)
         {
-            SynthesizePrintf("[AGUTop] io.reqIO.offsetAddrFromBase.fire 0x%x\n", io.reqIO.offsetAddrFromBase.bits)
+           // SynthesizePrintf("[AGUTop] io.reqIO.offsetAddrFromBase.fire 0x%x\n", io.reqIO.offsetAddrFromBase.bits)
         }
 
         /*
@@ -382,7 +382,7 @@ class AGUTop(params : AGUParams, config: Int = 0)(implicit p: Parameters) extend
 
         when (readyNewGen)
         {
-            SynthesizePrintf("CurrentOutStatement %d, usedOutStatement %d\n", currentOutStatement, usedOutStatements)
+          //  SynthesizePrintf("CurrentOutStatement %d, usedOutStatement %d\n", currentOutStatement, usedOutStatements)
             for (i <- 0 until params.nLoopRegs)
             {
              //   SynthesizePrintf("loopReg(%d) %d\n", i.U, LoopRegs(i))
