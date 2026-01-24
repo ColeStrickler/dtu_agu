@@ -35,12 +35,12 @@ class UnrollUnit(params: AGUParams) extends Module
     */
     
     val actively_computing = RegInit(false.B)
-    val debug_addr_reg = RegInit(0.U(32.W))
-    val debug_div_reg = RegInit(0.U(32.W))
+    //val debug_addr_reg = RegInit(0.U(32.W))
+    //val debug_div_reg = RegInit(0.U(32.W))
     actively_computing := Mux(actively_computing, !io.UnrolledInit.fire, io.AddressIn.fire)
-    io.AddressIn.ready:= !actively_computing
+    io.AddressIn.ready := !actively_computing
 
-    debug_addr_reg := Mux(io.AddressIn.fire, io.AddressIn.bits, debug_addr_reg)
+   // debug_addr_reg := Mux(io.AddressIn.fire, io.AddressIn.bits, debug_addr_reg)
    
 
 
@@ -48,7 +48,12 @@ class UnrollUnit(params: AGUParams) extends Module
     shift_divider.io.data_size.valid := io.AddressIn.fire // make sure we set up datasize first
     shift_divider.io.data_size.bits := io.DataSize
     val access_num = shift_divider.io.quotient
-    debug_div_reg := Mux(io.AddressIn.fire, access_num, debug_div_reg)
+   // debug_div_reg := Mux(io.AddressIn.fire, access_num, debug_div_reg)
+
+    val i_Reg = RegInit(false.B)
+    val i_RegValue = RegInit(0.U(params.bitwidth.W))
+    i_Reg := io.AddressIn.fire
+    i_RegValue := access_num
 
     val entry = params.nLoopRegs.U - io.nForLoopsActive
     when(io.AddressIn.fire)
@@ -88,16 +93,16 @@ class UnrollUnit(params: AGUParams) extends Module
     val singleLoop = (io.nForLoopsActive === 1.U)
     io.UnrolledInit.bits.OutStmtStart := UnrollSegments(last).remainder // this is currently giving us error
     io.UnrolledInit.bits.RegInitValues(last) := UnrollSegments(last).index.bits
-    UnrollSegments(last).inValue.bits := Mux(singleLoop,  access_num, UnrollSegments(last - 1).remainder)
-    UnrollSegments(last).inValue.valid := Mux(singleLoop, io.AddressIn.fire, UnrollSegments(last - 1).index.valid)
+    UnrollSegments(last).inValue.bits := Mux(singleLoop,  i_RegValue, UnrollSegments(last - 1).remainder)
+    UnrollSegments(last).inValue.valid := Mux(singleLoop, i_Reg, UnrollSegments(last - 1).index.valid)
     UnrollSegments(last).magic := io.MagicNumbers(last)
     UnrollSegments(last).rst := io.UnrolledInit.fire
     IndicesValidOut(last) := UnrollSegments(last).index.valid
 
     val allLoopsUsed = (io.nForLoopsActive === params.nLoopRegs.U)
     io.UnrolledInit.bits.RegInitValues(0) := UnrollSegments(0).index.bits
-    UnrollSegments(0).inValue.bits := access_num
-    UnrollSegments(0).inValue.valid := io.AddressIn.fire && allLoopsUsed // only valid when using all loop regs
+    UnrollSegments(0).inValue.bits := i_RegValue
+    UnrollSegments(0).inValue.valid := i_Reg && allLoopsUsed // only valid when using all loop regs
     UnrollSegments(0).magic := io.MagicNumbers(0)
     UnrollSegments(0).rst := io.UnrolledInit.fire
     IndicesValidOut(0) := Mux(allLoopsUsed, UnrollSegments(0).index.valid, true.B)
@@ -121,7 +126,7 @@ class UnrollUnit(params: AGUParams) extends Module
         when (i.U === entry)
         {
             // we use access num as we need the ShiftDivide preprocessing step done first
-            UnrollSegments(i).inValue.bits := access_num 
+            UnrollSegments(i).inValue.bits := i_RegValue
             UnrollSegments(i).inValue.valid := io.AddressIn.valid
             when(io.AddressIn.valid)
             {
