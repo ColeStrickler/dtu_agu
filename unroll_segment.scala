@@ -33,9 +33,9 @@ class UnrollSegment32(index: Int) extends Module
     val remreg = RegInit(0.U(32.W))
     val vreg_1 = RegInit(false.B)
     val vreg_2 = RegInit(false.B)
-    val mul = Wire(UInt(64.W))
+    val mul = Reg(UInt(64.W))
     val int_mag_res = Wire(UInt(32.W))
-    val magic_res = Reg(UInt(32.W))
+    val magic_res = Wire(UInt(32.W))
     mul := io.inValue.bits * io.magic.M
     int_mag_res := (mul >> 32)
     vreg_2 := vreg_1
