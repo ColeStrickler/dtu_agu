@@ -42,7 +42,7 @@ case class AGUParams
 )
 
 
-class AGUTop(params : AGUParams, config: Int = 0)(implicit p: Parameters) extends LazyModule 
+class AGUTop(params : AGUParams, config: Int = 0, maxOffsetBitWidth : Int)(implicit p: Parameters) extends LazyModule 
 {
 
 
@@ -74,7 +74,7 @@ class AGUTop(params : AGUParams, config: Int = 0)(implicit p: Parameters) extend
     class Impl extends LazyModuleImp(this) {
         val totalFuncUnits = params.nAdd+params.nMult+params.nPassthru
         val io = IO(new Bundle {
-            val reqIO = Flipped(new RequestorAGUPort)
+            val reqIO = Flipped(new RequestorAGUPort(maxOffsetBitWidth))
             // config out to datapath
 
         })
@@ -98,9 +98,9 @@ class AGUTop(params : AGUParams, config: Int = 0)(implicit p: Parameters) extend
 
         
         assert(params.nConstArraySize <= 255) // we aren't allowing for more rn
-        val constArrayValues = RegInit(VecInit(Seq.fill(params.nConstArray)(VecInit(Seq.fill(params.nConstArraySize)(0.U(32.W))))))
+        val constArrayValues = RegInit(VecInit(Seq.fill(params.nConstArray)(VecInit(Seq.fill(params.nConstArraySize)(0.U(maxOffsetBitWidth.W))))))
         val constArrayIndexSelector = RegInit(VecInit(Seq.fill(params.nConstArray)(0.U(8.W))))
-        val constArraySelected = WireInit(VecInit(Seq.fill(params.nConstArray)(0.U(32.W))))
+        val constArraySelected = WireInit(VecInit(Seq.fill(params.nConstArray)(0.U(maxOffsetBitWidth.W))))
         
         
 
@@ -218,7 +218,7 @@ class AGUTop(params : AGUParams, config: Int = 0)(implicit p: Parameters) extend
         }
 
         
-        val unroll_unit = Module(new UnrollUnit(params))
+        val unroll_unit = Module(new UnrollUnit(params, maxOffsetBitWidth))
 
         /*
             Need to think if we want to do this the other way around/backwards (not that it matters for functionality)
@@ -283,19 +283,19 @@ class AGUTop(params : AGUParams, config: Int = 0)(implicit p: Parameters) extend
         assert(offsetMagicRegs < 0xf00, "offset magic regs < 0xf00")
         for (i <- 0 until params.nLoopRegs) // Loop registers immediately after routing cells
         {
-            mmregBuf += ((bytesUsedRouting+(i*bytesPerLoop) -> Seq(RegField(params.bitwidth, LoopRegs(i), RegFieldDesc("forloop", "forloop")))))
+            mmregBuf += ((bytesUsedRouting+(i*bytesPerLoop) -> Seq(RegField(LoopRegs(i).getWidth, LoopRegs(i), RegFieldDesc("forloop", "forloop")))))
             mmregBuf += ((bytesUsedRouting+bytesUsedForLoop+(i*bytesPerLoop) -> Seq(RegField(params.bitwidth, LoopIncRegs(i), RegFieldDesc("incloop", "incloop")))))
         }
         for (i <- 0 until params.nConstRegs)
         {
-            mmregBuf += ((offsetConstRegs + i*bytesPerConst) -> Seq(RegField(params.bitwidth, ConstantRegs(i), RegFieldDesc("constreg", "constreg"))))
+            mmregBuf += ((offsetConstRegs + i*bytesPerConst) -> Seq(RegField(ConstantRegs(i).getWidth, ConstantRegs(i), RegFieldDesc("constreg", "constreg"))))
         }
 
         for (i <- 0 until params.nConstArray)
         {
             for (j <- 0 until params.nConstArraySize)
             {
-                mmregBuf += (((offsetConstArray + i*bytesPerConstArray + j*4) ->Seq(RegField(32, constArrayValues(i)(j), RegFieldDesc("constArrVal", "constArrVal")))))
+                mmregBuf += (((offsetConstArray + i*bytesPerConstArray + j*4) ->Seq(RegField(constArrayValues(i)(j).getWidth, constArrayValues(i)(j), RegFieldDesc("constArrVal", "constArrVal")))))
             }
             mmregBuf += (((offsetConstArray + i*bytesPerConstArray + params.nConstArraySize*4) ->Seq(RegField(8, constArrayIndexSelector(i), RegFieldDesc("constArrIndexSel", "constArrIndexSel")))))
         }
@@ -385,7 +385,7 @@ class AGUTop(params : AGUParams, config: Int = 0)(implicit p: Parameters) extend
           //  SynthesizePrintf("CurrentOutStatement %d, usedOutStatement %d\n", currentOutStatement, usedOutStatements)
             for (i <- 0 until params.nLoopRegs)
             {
-             //   SynthesizePrintf("loopReg(%d) %d\n", i.U, LoopRegs(i))
+                //SynthesizePrintf("loopReg(%d) %d\n", i.U, LoopRegs(i))
             }
         }
         
@@ -411,7 +411,7 @@ class AGUTop(params : AGUParams, config: Int = 0)(implicit p: Parameters) extend
         }
 
 
-        val dpath = Module(new AGUDatapath(params, params.nLoopRegs, params.nConstRegs, params.nLayers, params.nMult, params.nAdd, params.nPassthru, params.maxVarOutputs))
+        val dpath = Module(new AGUDatapath(params, params.nLoopRegs, params.nConstRegs, params.nLayers, params.nMult, params.nAdd, params.nPassthru, params.maxVarOutputs, maxOffsetBitWidth))
         
 
         dpath.io.doGen := readyNewGen

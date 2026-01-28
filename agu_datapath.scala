@@ -6,7 +6,7 @@ import chisel3.util._
 import firrtl.options.TargetDirAnnotation
 //import midas.targetutils.SynthesizePrintf
 
-class AGUDatapath(params: AGUParams, nLoopRegs : Int, nConstRegs: Int, nLayers: Int, nMultUnits: Int, nAddUnits: Int, nPassthru: Int, maxVarOutputs: Int) extends Module
+class AGUDatapath(params: AGUParams, nLoopRegs : Int, nConstRegs: Int, nLayers: Int, nMultUnits: Int, nAddUnits: Int, nPassthru: Int, maxVarOutputs: Int, maxOffsetBitWidth: Int) extends Module
 {
 
     val NULL_ROUTE : Int = {
@@ -23,25 +23,25 @@ class AGUDatapath(params: AGUParams, nLoopRegs : Int, nConstRegs: Int, nLayers: 
     val totalFuncUnits = nAddUnits + nMultUnits + nPassthru
     val io = IO(new Bundle{
         val doGen = Input(Bool())
-        val output = Output(UInt(bitwidth.W))
+        val output = Output(UInt(maxOffsetBitWidth.W))
         val reset = Input(Bool())
         val RoutingConfigIn = Input(Vec(nLayers+1, Vec(totalFuncUnits, Vec(maxVarOutputs, UInt(routerRegBitsNeeded.W)))))
         val StallLayer = Input(Vec(nLayers+1, Bool()))
 
 
-        val LoopRegsIn =            Input(Vec(nLoopRegs, UInt(bitwidth.W)))
-        val LoopIncRegsIn =         Input(Vec(nLoopRegs, UInt(bitwidth.W)))
-        val ConstantRegsIn =        Input(Vec(nConstRegs, UInt(bitwidth.W)))
-        val ConstantArrayRegIn =    Input(Vec(params.nConstArray, UInt(bitwidth.W)))
+        val LoopRegsIn =            Input(Vec(nLoopRegs, UInt(maxOffsetBitWidth.W)))
+        val LoopIncRegsIn =         Input(Vec(nLoopRegs, UInt(maxOffsetBitWidth.W)))
+        val ConstantRegsIn =        Input(Vec(nConstRegs, UInt(maxOffsetBitWidth.W)))
+        val ConstantArrayRegIn =    Input(Vec(params.nConstArray, UInt(maxOffsetBitWidth.W)))
     })
 
     /*
         We will need to have these compiled for us from source. We can maintain an invariant like we were in the processor model
     */
-    val LoopRegs = Wire(Vec(nLoopRegs, UInt(bitwidth.W)))
-    val LoopIncRegs = Wire(Vec(nLoopRegs, UInt(bitwidth.W)))
-    val ConstantRegs = Wire(Vec(nConstRegs, UInt(bitwidth.W)))
-    val ConstantArrayRegs = Wire(Vec(params.nConstArray, UInt(bitwidth.W)))
+    val LoopRegs = Wire(Vec(nLoopRegs, UInt(maxOffsetBitWidth.W)))
+    val LoopIncRegs = Wire(Vec(nLoopRegs, UInt(maxOffsetBitWidth.W)))
+    val ConstantRegs = Wire(Vec(nConstRegs, UInt(maxOffsetBitWidth.W)))
+    val ConstantArrayRegs = Wire(Vec(params.nConstArray, UInt(maxOffsetBitWidth.W)))
     LoopRegs := io.LoopRegsIn
     LoopIncRegs := io.LoopIncRegsIn
     ConstantRegs := io.ConstantRegsIn
@@ -53,18 +53,18 @@ class AGUDatapath(params: AGUParams, nLoopRegs : Int, nConstRegs: Int, nLayers: 
        // SynthesizePrintf("[AGUDatapath] io.doGen %d\n", io.doGen)
         for (i <- 0 until nLoopRegs)
         {
-           // SynthesizePrintf("loopreg(%d) %d\n", i.U, LoopRegs(i))
+          //  SynthesizePrintf("loopreg(%d) %d\n", i.U, LoopRegs(i))
            // SynthesizePrintf("loopincreg(%d) %d\n", i.U, LoopIncRegs(i))
         }
 
         for (i <- 0 until nConstRegs)
         {
-           // SynthesizePrintf("constReg(%d) %d\n", i.U, ConstantRegs(i))
+          //  SynthesizePrintf("constReg(%d) %d\n", i.U, ConstantRegs(i))
         }
 
         for (i <- 0 until params.nConstArray)
         {
-            //SynthesizePrintf("constArrayReg(%d) %d\n", i.U, ConstantArrayRegs(i))
+          //  SynthesizePrintf("constArrayReg(%d) %d\n", i.U, ConstantArrayRegs(i))
         }
     }
 
@@ -78,7 +78,7 @@ class AGUDatapath(params: AGUParams, nLoopRegs : Int, nConstRegs: Int, nLayers: 
         (0 until nLayers).map { layerIdx =>
             VecInit(
             (0 until nAddUnits).map { unitIdx =>
-                val addUnit = Module(new AddUnit(bitwidth, 2, layerIdx)) // pass layerIdx
+                val addUnit = Module(new AddUnit(maxOffsetBitWidth, 2, layerIdx)) // pass layerIdx
                 addUnit.io
             }
             )
@@ -89,7 +89,7 @@ class AGUDatapath(params: AGUParams, nLoopRegs : Int, nConstRegs: Int, nLayers: 
         (0 until nLayers).map { layerIdx =>
             VecInit(
             (0 until nMultUnits).map { unitIdx =>
-                val multUnit = Module(new MultUnit(bitwidth, layerIdx)) // pass layerIdx
+                val multUnit = Module(new MultUnit(maxOffsetBitWidth, layerIdx)) // pass layerIdx
                 multUnit.io
             }
             )
@@ -100,7 +100,7 @@ class AGUDatapath(params: AGUParams, nLoopRegs : Int, nConstRegs: Int, nLayers: 
     val PassThru = WireInit(VecInit(Seq.fill(nLayers)(VecInit(Seq.fill(nPassthru)(0.U(bitwidth.W))))))
     val routing = VecInit(
         (0 to nLayers).map { layerIdx =>
-            val router = Module(new LayerRouter(params, nUnits, nUnits, 2, 32, maxVarOutputs, layerIdx)) // you can pass layerIdx if needed
+            val router = Module(new LayerRouter(params, nUnits, nUnits, 2, maxOffsetBitWidth, maxVarOutputs, layerIdx)) // you can pass layerIdx if needed
             router.io
         }
     )

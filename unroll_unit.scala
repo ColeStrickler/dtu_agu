@@ -2,33 +2,33 @@ package agu
 
 import chisel3._
 import chisel3.util._
-import firrtl.options.TargetDirAnnotation
+//import firrtl.options.TargetDirAnnotation
 //import midas.targetutils.SynthesizePrintf
 
 
-case class UnrolledInitBundle(params: AGUParams) extends Bundle
+case class UnrolledInitBundle(params: AGUParams, maxOffsetBitWidth: Int) extends Bundle
 {
     val OutStmtStart = Output(UInt(log2Ceil(params.maxOutStatements).W))
-    val RegInitValues = Output(Vec(params.nLoopRegs, UInt(params.bitwidth.W)))
+    val RegInitValues = Output(Vec(params.nLoopRegs, UInt(maxOffsetBitWidth.W)))
 }
 
 
-case class UnrollUnitIO(params: AGUParams) extends Bundle
+case class UnrollUnitIO(params: AGUParams, maxOffsetBitWidth: Int) extends Bundle
 {
-    val AddressIn = Flipped(Decoupled(UInt(params.bitwidth.W))) 
+    val AddressIn = Flipped(Decoupled(UInt(maxOffsetBitWidth.W))) 
     val nForLoopsActive = Input(UInt(log2Ceil(params.nLoopRegs).W))
     val MagicNumbers = Input(Vec(params.nLoopRegs, MagicNumber(params.bitwidth)))
     val DataSize = Input(UInt(8.W))
 
-    val UnrolledInit = Decoupled(new UnrolledInitBundle(params))
+    val UnrolledInit = Decoupled(new UnrolledInitBundle(params, maxOffsetBitWidth))
     
 }
 
 
-class UnrollUnit(params: AGUParams) extends Module
+class UnrollUnit(params: AGUParams, maxOffsetBitWidth: Int) extends Module
 {
-    val io = IO(new UnrollUnitIO(params))
-    val shift_divider = Module(new ShiftDivider(params.bitwidth))
+    val io = IO(new UnrollUnitIO(params, maxOffsetBitWidth))
+    val shift_divider = Module(new ShiftDivider(maxOffsetBitWidth))
 
     /*
         We need to mark wehen we can reasonably take input IO
@@ -51,9 +51,9 @@ class UnrollUnit(params: AGUParams) extends Module
    // debug_div_reg := Mux(io.AddressIn.fire, access_num, debug_div_reg)
 
     val i_Reg = RegInit(false.B)
-    val i_RegValue = RegInit(0.U(params.bitwidth.W))
+    val i_RegValue = RegInit(0.U(maxOffsetBitWidth.W))
     i_Reg := io.AddressIn.fire
-    i_RegValue := access_num
+    i_RegValue := Mux(io.AddressIn.fire, access_num, i_RegValue)
 
     val entry = params.nLoopRegs.U - io.nForLoopsActive
     when(io.AddressIn.fire)
@@ -74,7 +74,7 @@ class UnrollUnit(params: AGUParams) extends Module
     */
     val UnrollSegments = VecInit(
         (0 until params.nLoopRegs).map { unitIdx =>
-            val unroll_seg = Module(new UnrollSegment32(unitIdx)) 
+            val unroll_seg = Module(new UnrollSegment32(unitIdx, maxOffsetBitWidth)) 
             unroll_seg.io
         }
     )
@@ -127,7 +127,7 @@ class UnrollUnit(params: AGUParams) extends Module
         {
             // we use access num as we need the ShiftDivide preprocessing step done first
             UnrollSegments(i).inValue.bits := i_RegValue
-            UnrollSegments(i).inValue.valid := io.AddressIn.valid
+            UnrollSegments(i).inValue.valid := i_Reg
             when(io.AddressIn.valid)
             {
                //  SynthesizePrintf("UnrollUnit io.addressin.valid Here\n")

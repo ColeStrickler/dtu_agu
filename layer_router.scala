@@ -82,7 +82,7 @@ class LayerRouter(params: AGUParams, nInputs: Int, nOutputs: Int, outputSize : I
                 
                 io.outputs(sel_output)(idx) := buffer(i)//io.inputs(i)
 
-               //SynthesizePrintf("[Layer%d Router] [%d] %d-%d (idx %d)\n", layer.U, buffer(i), i.U, sel_output, idx)
+              // SynthesizePrintf("[Layer%d Router] [%d] %d->%d (idx %d)\n", layer.U, buffer(i), i.U, sel_output, idx)
                 assert(maxOutputs == 2) // our routing logic only works when we have 2
 
 
