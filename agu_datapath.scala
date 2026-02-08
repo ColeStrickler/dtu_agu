@@ -27,7 +27,7 @@ class AGUDatapath(params: AGUParams, nLoopRegs : Int, nConstRegs: Int, nLayers: 
         val reset = Input(Bool())
         val RoutingConfigIn = Input(Vec(nLayers+1, Vec(totalFuncUnits, Vec(maxVarOutputs, UInt(routerRegBitsNeeded.W)))))
         val StallLayer = Input(Vec(nLayers+1, Bool()))
-        val data_size = Output(UInt(8.W))                       // used by agu
+        val data_size = Input(UInt(6.W))                       // used by agu
 
 
         val LoopRegsIn =            Input(Vec(nLoopRegs, UInt(maxOffsetBitWidth.W)))

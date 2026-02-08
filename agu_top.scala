@@ -420,6 +420,7 @@ class AGUTop(params : AGUParams, config: Int = 0, maxOffsetBitWidth : Int)(impli
         dpath.io.LoopIncRegsIn := LoopIncRegs
         dpath.io.LoopRegsIn := LoopRegs
         dpath.io.ConstantArrayRegIn := constArraySelected
+        dpath.io.data_size := io.reqIO.data_size
 
 
 
