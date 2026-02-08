@@ -27,6 +27,7 @@ class AGUDatapath(params: AGUParams, nLoopRegs : Int, nConstRegs: Int, nLayers: 
         val reset = Input(Bool())
         val RoutingConfigIn = Input(Vec(nLayers+1, Vec(totalFuncUnits, Vec(maxVarOutputs, UInt(routerRegBitsNeeded.W)))))
         val StallLayer = Input(Vec(nLayers+1, Bool()))
+        val data_size = Output(UInt(8.W))                       // used by agu
 
 
         val LoopRegsIn =            Input(Vec(nLoopRegs, UInt(maxOffsetBitWidth.W)))
@@ -42,11 +43,12 @@ class AGUDatapath(params: AGUParams, nLoopRegs : Int, nConstRegs: Int, nLayers: 
     val LoopIncRegs = Wire(Vec(nLoopRegs, UInt(maxOffsetBitWidth.W)))
     val ConstantRegs = Wire(Vec(nConstRegs, UInt(maxOffsetBitWidth.W)))
     val ConstantArrayRegs = Wire(Vec(params.nConstArray, UInt(maxOffsetBitWidth.W)))
+    val data_size  = RegInit(4.U(6.W))
     LoopRegs := io.LoopRegsIn
     LoopIncRegs := io.LoopIncRegsIn
     ConstantRegs := io.ConstantRegsIn
     ConstantArrayRegs := io.ConstantArrayRegIn
-
+    data_size := io.data_size 
 
     when (io.doGen)
     {
@@ -198,6 +200,6 @@ class AGUDatapath(params: AGUParams, nLoopRegs : Int, nConstRegs: Int, nLayers: 
     }
     
 
-    io.output := routing(nLayers).outputs(nAddUnits+nMultUnits)(0) // output will always come from last pass thru --> some inefficiency here
+    io.output := routing(nLayers).outputs(nAddUnits+nMultUnits)(0) * data_size // output will always come from last pass thru --> some inefficiency here
 }
 
