@@ -200,6 +200,21 @@ class AGUDatapath(params: AGUParams, nLoopRegs : Int, nConstRegs: Int, nLayers: 
     }
     
 
-    io.output := routing(nLayers).outputs(nAddUnits+nMultUnits)(0) * data_size // output will always come from last pass thru --> some inefficiency here
+
+    val shift = WireInit(1.U(4.W))
+    when (data_size === 16.U) {
+        shift := 4.U
+    } .elsewhen (data_size === 8.U) {
+        shift := 3.U
+    } .elsewhen (data_size === 4.U) {
+       shift := 2.U
+    }.elsewhen (data_size === 2.U)  { // 1 bit
+        shift := 1.U
+    }
+
+    
+
+
+    io.output := routing(nLayers).outputs(nAddUnits+nMultUnits)(0) << shift // output will always come from last pass thru --> some inefficiency here
 }
 
