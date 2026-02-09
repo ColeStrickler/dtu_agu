@@ -26,7 +26,7 @@ import mainargs.TokensReader.Constant
 
 case class AGUParams
 (
-    maxOutStatements: Int = 1,
+    maxOutStatements: Int = 8,
     nLayers: Int = 5,
     nAdd : Int = 4,
     nMult : Int = 4,
@@ -57,7 +57,8 @@ class AGUTop(params : AGUParams, config: Int = 0, maxOffsetBitWidth : Int)(impli
         else
             (math.pow(2, bits)-1).toInt
     }
-    val routerRegBitsNeeded = log2Ceil(NULL_ROUTE)
+    val routerRegBitsNeeded = log2Ceil(NULL_ROUTE) + 1
+    println(s"router reg $routerRegBitsNeeded")
     def alignTo8(x: Int): Int = ((x + 7) / 8) * 8
 
     val CacheLineSizeBytes = 64.U // bytes
@@ -144,7 +145,7 @@ class AGUTop(params : AGUParams, config: Int = 0, maxOffsetBitWidth : Int)(impli
         val RoutingConfig = RegInit(VecInit(Seq.fill(params.maxOutStatements)(
                                         VecInit(Seq.fill(params.nLayers+1)(
                                             VecInit(Seq.fill(totalFuncUnits)(VecInit(Seq.fill(params.maxVarOutputs)(NULL_ROUTE.U(routerRegBitsNeeded.W))))))))))
-        
+         println(s"agutop regBit $routerRegBitsNeeded")
 
 
         
@@ -391,7 +392,7 @@ class AGUTop(params : AGUParams, config: Int = 0, maxOffsetBitWidth : Int)(impli
         
 
         val RoutingConfigOut = Wire(
-            Vec(params.nLayers+1, Vec(totalFuncUnits, Vec(params.maxVarOutputs, UInt(8.W))))
+            Vec(params.nLayers+1, Vec(totalFuncUnits, Vec(params.maxVarOutputs, UInt(routerRegBitsNeeded.W))))
         )
         for (i <- 0 until params.nLayers+1)
         {

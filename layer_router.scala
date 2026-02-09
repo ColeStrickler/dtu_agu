@@ -2,7 +2,7 @@ package agu
 
 import chisel3._
 import chisel3.util._
-//import midas.targetutils.SynthesizePrintf
+import midas.targetutils.SynthesizePrintf
 
 
 
@@ -19,7 +19,8 @@ class LayerRouter(params: AGUParams, nInputs: Int, nOutputs: Int, outputSize : I
         else
             (math.pow(2, bits)-1).toInt
     }
-    val routerRegBitsNeeded = log2Ceil(NULL_ROUTE)
+    val routerRegBitsNeeded = log2Ceil(NULL_ROUTE) + 1
+    println(s"layerrouter regBit $routerRegBitsNeeded")
     
     val io = IO(new Bundle{
         val inputs = Input(Vec(nInputs, UInt(bitwidth.W)))
@@ -66,25 +67,18 @@ class LayerRouter(params: AGUParams, nInputs: Int, nOutputs: Int, outputSize : I
         
         for (j <- 0 until maxOutputs)
         {
-            val sel_output = io.routing(i)(j)
+            val sel_output = io.routing(i)(j)(routerRegBitsNeeded-2,0)
+            val idx = io.routing(i)(j)(routerRegBitsNeeded-1)
             when (sel_output =/= NULL_ROUTE.U) // this is default value
-            {
-                val idx = if (i > 0)
-                {
-                    (0 until i).map(k =>
-                     (0 until maxOutputs).map{x => io.routing(k)(x) === sel_output}.map(b => b.asUInt).reduce(_ + _)
-                    ).reduce(_ +  _) + Mux(j.U === 1.U && io.routing(i)(0) === sel_output, 1.U, 0.U)  
-                }
-                else
-                {
-                    Mux(j.U === 1.U && io.routing(i)(0) === sel_output, 1.U, 0.U)
-                }
-                
+            {               
                 io.outputs(sel_output)(idx) := buffer(i)//io.inputs(i)
 
-              // SynthesizePrintf("[Layer%d Router] [%d] %d->%d (idx %d)\n", layer.U, buffer(i), i.U, sel_output, idx)
+               //
                 assert(maxOutputs == 2) // our routing logic only works when we have 2
-
+                //if (layer == 0)
+                //{
+                //    //SynthesizePrintf("[Layer%d Router] %d->%d (idx %d) %d\n", layer.U, i.U, sel_output, idx, io.routing(i)(j))
+                //}
 
                 // when (idx >= 2.U)
                 //{

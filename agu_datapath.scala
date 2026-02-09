@@ -17,8 +17,8 @@ class AGUDatapath(params: AGUParams, nLoopRegs : Int, nConstRegs: Int, nLayers: 
         else
             (math.pow(2, bits)-1).toInt
     }
-    val routerRegBitsNeeded = log2Ceil(NULL_ROUTE)
-
+    val routerRegBitsNeeded = log2Ceil(NULL_ROUTE) + 1
+     println(s"datapath regBit $routerRegBitsNeeded")
     val bitwidth = 32
     val totalFuncUnits = nAddUnits + nMultUnits + nPassthru
     val io = IO(new Bundle{
