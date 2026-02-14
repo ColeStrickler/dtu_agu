@@ -12,7 +12,7 @@ class LayerRouter(params: AGUParams, nInputs: Int, nOutputs: Int, outputSize : I
 {
 
     val NULL_ROUTE : Int = {
-        val totalFuncUnits = params.nAdd + params.nMult + params.nPassthru
+        val totalFuncUnits = params.nAdd + params.nMult + params.nPassthru + params.nSub
         val bits = log2Ceil(totalFuncUnits)
         if (math.pow(2, bits)-1 == totalFuncUnits)
             (math.pow(2,bits+1)-1).toInt
