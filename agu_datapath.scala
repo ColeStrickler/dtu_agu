@@ -10,7 +10,7 @@ class AGUDatapath(params: AGUParams, nLoopRegs : Int, nConstRegs: Int, nLayers: 
 {
 
     val NULL_ROUTE : Int = {
-        val totalFuncUnits = params.nAdd + params.nMult + params.nPassthru
+        val totalFuncUnits = params.nAdd + params.nMult + params.nPassthru + params.nSub
         val bits = log2Ceil(totalFuncUnits)
         if (math.pow(2, bits)-1 == totalFuncUnits)
             (math.pow(2,bits+1)-1).toInt
@@ -20,7 +20,7 @@ class AGUDatapath(params: AGUParams, nLoopRegs : Int, nConstRegs: Int, nLayers: 
     val routerRegBitsNeeded = log2Ceil(NULL_ROUTE) + 1
      println(s"datapath regBit $routerRegBitsNeeded")
     val bitwidth = 32
-    val totalFuncUnits = nAddUnits + nMultUnits + nPassthru
+    val totalFuncUnits = nAddUnits + nMultUnits + nPassthru + params.nSub
     val io = IO(new Bundle{
         val doGen = Input(Bool())
         val output = Output(UInt(maxOffsetBitWidth.W))
@@ -98,7 +98,7 @@ class AGUDatapath(params: AGUParams, nLoopRegs : Int, nConstRegs: Int, nLayers: 
         }
     )
 
-    val nUnits = nAddUnits + nMultUnits + nPassthru
+    val nUnits = nAddUnits + nMultUnits + nPassthru + params.nSub
     val PassThru = WireInit(VecInit(Seq.fill(nLayers)(VecInit(Seq.fill(nPassthru)(0.U(bitwidth.W))))))
     val routing = VecInit(
         (0 to nLayers).map { layerIdx =>
@@ -106,6 +106,19 @@ class AGUDatapath(params: AGUParams, nLoopRegs : Int, nConstRegs: Int, nLayers: 
             router.io
         }
     )
+
+    val SubLayers = VecInit(
+        (0 until nLayers).map { layerIdx =>
+            VecInit(
+            (0 until params.nSub).map { unitIdx =>
+                val subUnit = Module(new SubUnit(maxOffsetBitWidth, 2, layerIdx)) // pass layerIdx
+                subUnit.io
+            }
+            )
+        }
+    )
+
+
 
 
     /*
@@ -195,6 +208,13 @@ class AGUDatapath(params: AGUParams, nLoopRegs : Int, nConstRegs: Int, nLayers: 
             
             routing(i+1).inputs(j+nAddUnits+nMultUnits) := PassThru(i)(j)
 
+        }
+
+        for (j <- 0 until params.nSub)
+        {
+            SubLayers(i)(j).inA := routing(i).outputs(j+nAddUnits+nMultUnits+nPassthru)(0)
+            SubLayers(i)(j).inB := routing(i).outputs(j+nAddUnits+nMultUnits+nPassthru)(1)
+            routing(i+1).inputs(j) := SubLayers(i)(j).output
         }
 
     }
