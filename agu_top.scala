@@ -30,7 +30,7 @@ case class AGUParams
     nLayers: Int = 5,
     nAdd : Int = 4,
     nMult : Int = 4,
-    nSub : Int = 0,
+    nSub : Int = 4,
     bitwidth : Int = 32,
     nPassthru : Int = 4,
     nLoopRegs : Int = 5,
@@ -52,11 +52,12 @@ class AGUTop(params : AGUParams, config: Int = 0, maxOffsetBitWidth : Int)(impli
     */
     val NULL_ROUTE : Int = {
         val totalFuncUnits = params.nAdd + params.nMult + params.nPassthru + params.nSub
-        val bits = log2Ceil(totalFuncUnits)
-        if (math.pow(2, bits)-1 == totalFuncUnits)
-            (math.pow(2,bits+1)-1).toInt
-        else
-            (math.pow(2, bits)-1).toInt
+        val bits = log2Ceil(totalFuncUnits + 1)
+        (math.pow(2, bits)-1).toInt
+        //if (math.pow(2, bits)-1 == totalFuncUnits)
+        //    (math.pow(2,bits+1)-1).toInt
+        //else
+        //    (math.pow(2, bits)-1).toInt
     }
     val routerRegBitsNeeded = log2Ceil(NULL_ROUTE) + 1
     println(s"router reg $routerRegBitsNeeded")

@@ -20,7 +20,7 @@ class SubUnit(bitwidth: Int, nInputs: Int, layer: Int) extends Module {
     
     io.output := io.inA - io.inB
     
-    when (io.inA + io.inB =/= 0.U)
+    when (io.inA - io.inB =/= 0.U)
     {
       //  SynthesizePrintf("addunit-layer%d (%d) + (%d) = [%d]\n", layer.U, io.inA, io.inB, io.output)
     }

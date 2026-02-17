@@ -13,11 +13,12 @@ class LayerRouter(params: AGUParams, nInputs: Int, nOutputs: Int, outputSize : I
 
     val NULL_ROUTE : Int = {
         val totalFuncUnits = params.nAdd + params.nMult + params.nPassthru + params.nSub
-        val bits = log2Ceil(totalFuncUnits)
-        if (math.pow(2, bits)-1 == totalFuncUnits)
-            (math.pow(2,bits+1)-1).toInt
-        else
-            (math.pow(2, bits)-1).toInt
+        val bits = log2Ceil(totalFuncUnits+1)
+        (math.pow(2, bits)-1).toInt
+        //if (math.pow(2, bits)-1 == totalFuncUnits)
+        //    (math.pow(2,bits+1)-1).toInt
+        //else
+        //    (math.pow(2, bits)-1).toInt
     }
     val routerRegBitsNeeded = log2Ceil(NULL_ROUTE) + 1
     println(s"layerrouter regBit $routerRegBitsNeeded")
@@ -75,10 +76,10 @@ class LayerRouter(params: AGUParams, nInputs: Int, nOutputs: Int, outputSize : I
 
                //
                 assert(maxOutputs == 2) // our routing logic only works when we have 2
-                //if (layer == 0)
-                //{
-                //    //SynthesizePrintf("[Layer%d Router] %d->%d (idx %d) %d\n", layer.U, i.U, sel_output, idx, io.routing(i)(j))
-                //}
+                if (layer == 0 || layer == 1)
+                {
+                    SynthesizePrintf("[Layer%d Router] %d->%d (idx %d) %d\n", layer.U, i.U, sel_output, idx, buffer(i))
+                }
 
                 // when (idx >= 2.U)
                 //{

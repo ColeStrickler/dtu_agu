@@ -9,13 +9,14 @@ import firrtl.options.TargetDirAnnotation
 class AGUDatapath(params: AGUParams, nLoopRegs : Int, nConstRegs: Int, nLayers: Int, nMultUnits: Int, nAddUnits: Int, nPassthru: Int, maxVarOutputs: Int, maxOffsetBitWidth: Int) extends Module
 {
 
-    val NULL_ROUTE : Int = {
-        val totalFuncUnits = params.nAdd + params.nMult + params.nPassthru + params.nSub
-        val bits = log2Ceil(totalFuncUnits)
-        if (math.pow(2, bits)-1 == totalFuncUnits)
-            (math.pow(2,bits+1)-1).toInt
-        else
+        val NULL_ROUTE : Int = {
+            val totalFuncUnits = params.nAdd + params.nMult + params.nPassthru + params.nSub
+            val bits = log2Ceil(totalFuncUnits + 1)
             (math.pow(2, bits)-1).toInt
+            //if (math.pow(2, bits)-1 == totalFuncUnits)
+            //    (math.pow(2,bits+1)-1).toInt
+            //else
+            //    (math.pow(2, bits)-1).toInt
     }
     val routerRegBitsNeeded = log2Ceil(NULL_ROUTE) + 1
      println(s"datapath regBit $routerRegBitsNeeded")
@@ -214,7 +215,7 @@ class AGUDatapath(params: AGUParams, nLoopRegs : Int, nConstRegs: Int, nLayers: 
         {
             SubLayers(i)(j).inA := routing(i).outputs(j+nAddUnits+nMultUnits+nPassthru)(0)
             SubLayers(i)(j).inB := routing(i).outputs(j+nAddUnits+nMultUnits+nPassthru)(1)
-            routing(i+1).inputs(j) := SubLayers(i)(j).output
+            routing(i+1).inputs(j+nAddUnits+nMultUnits+nPassthru) := SubLayers(i)(j).output
         }
 
     }
