@@ -9,7 +9,7 @@ import freechips.rocketchip.tilelink._
 import freechips.rocketchip.tilelink.TLBundleA
 import freechips.rocketchip.regmapper._
 import freechips.rocketchip
-//import midas.targetutils.SynthesizePrintf
+import midas.targetutils.SynthesizePrintf
 import org.chipsalliance.cde.config.{Parameters, Field, Config}
 import scala.collection.mutable.ArrayBuffer
 import subsystem.rme.RequestorAGUPort
@@ -26,11 +26,11 @@ import mainargs.TokensReader.Constant
 
 case class AGUParams
 (
-    maxOutStatements: Int = 8,
+    maxOutStatements: Int = 1,
     nLayers: Int = 5,
-    nAdd : Int = 4,
+    nAdd : Int = 3,
     nMult : Int = 4,
-    nSub : Int = 4,
+    nSub : Int = 2,
     bitwidth : Int = 32,
     nPassthru : Int = 4,
     nLoopRegs : Int = 5,
@@ -404,11 +404,27 @@ class AGUTop(params : AGUParams, config: Int = 0, maxOffsetBitWidth : Int)(impli
 
         when (config_reset)
         {
-           // SynthesizePrintf("configReset=true\n")
+            SynthesizePrintf("configReset=true\n")
             // zero all routing config
             RoutingConfig.foreach(i => i.foreach(j => j.foreach(k => k.foreach(l => l := NULL_ROUTE.U))))// ignore value
+            usedForLoops := 1.U
+            usedOutStatements := 1.U
+            nOutStatements := 1.U
 
-            
+            constArrayValues.foreach(i  => i.foreach(j => j := 0.U))
+            constArrayIndexSelector.foreach(i => i := 0.U)
+
+
+            LoopRegs.foreach(i => i := 0.U)
+            LoopIncRegs.foreach(i => i := 0.U)
+            ConstantRegs.foreach(i => i := 0.U)
+            StrideRegs.foreach(i => i := 0.U)
+
+
+            magic_reg_M.foreach(i => i := 0.U)
+            magic_reg_S.foreach(i => i := 0.U)
+            magic_reg_AddInidicator.foreach(i => i := false.B)
+
             // invalidate all layers
             validAtLayer.foreach(f => f := false.B)    
         }
