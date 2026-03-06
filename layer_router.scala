@@ -41,7 +41,7 @@ class LayerRouter(params: AGUParams, nInputs: Int, nOutputs: Int, outputSize : I
     for (i <- 0 until nInputs)
     {
         buffer(i) := io.inputs(i)
-    }
+    }       
 
 
     
@@ -75,7 +75,7 @@ class LayerRouter(params: AGUParams, nInputs: Int, nOutputs: Int, outputSize : I
                 io.outputs(sel_output)(idx) := buffer(i)//io.inputs(i)
 
                //
-                assert(maxOutputs == 2) // our routing logic only works when we have 2
+                //assert(maxOutputs == 2) // our routing logic only works when we have 2
 
 
                 // when (idx >= 2.U)

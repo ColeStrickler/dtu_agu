@@ -9,7 +9,7 @@ import firrtl.options.TargetDirAnnotation
 class AGUDatapath(params: AGUParams, nLoopRegs : Int, nConstRegs: Int, nLayers: Int, nMultUnits: Int, nAddUnits: Int, nPassthru: Int, maxVarOutputs: Int, maxOffsetBitWidth: Int) extends Module
 {
 
-        val NULL_ROUTE : Int = {
+    val NULL_ROUTE : Int = {
             val totalFuncUnits = params.nAdd + params.nMult + params.nPassthru + params.nSub
             val bits = log2Ceil(totalFuncUnits + 1)
             (math.pow(2, bits)-1).toInt

@@ -36,19 +36,22 @@ class UnrollSegment32(index: Int, maxOffsetBitWidth: Int) extends Module
     val mul = Reg(UInt(64.W))
     val int_mag_res = Wire(UInt(32.W))
     val magic_res = Wire(UInt(32.W))
+    val magic_s = RegInit(0.U(io.magic.s.getWidth.W)) 
+    val inBits = RegInit(0.U(io.inValue.bits.getWidth.W))    
+    val magic_stride = RegInit(0.U(io.magic.stride.getWidth.W))
 
 
-    mul := io.inValue.bits * io.magic.M // cycle 0
-    int_mag_res := (mul >> 32) // cycle 1
+    mul := io.inValue.bits * io.magic.M // cycle 0 -- 
+    int_mag_res := (mul >> 32) // cycle 1 --> if this breaks timing, we can probably just slice instead of shift?
     
     vreg_2 := vreg_1 // cycle 1
     when (io.magic.add_indicator)
     {
-        magic_res := (int_mag_res + ((io.inValue.bits - int_mag_res) >> 1)) >> io.magic.s // cycle 1
+        magic_res := (int_mag_res + ((inBits - int_mag_res) >> 1)) >> magic_s // cycle 1
     }
     .otherwise
     {
-        magic_res := (int_mag_res >> io.magic.s) //  cycle 1
+        magic_res := (int_mag_res >> magic_s) //  cycle 1
     }
 
     when(io.rst)
@@ -64,6 +67,9 @@ class UnrollSegment32(index: Int, maxOffsetBitWidth: Int) extends Module
     .elsewhen(io.inValue.valid)
     {
         vreg_1 := io.inValue.valid  // cycle 0
+        magic_s := io.magic.s
+        inBits := io.inValue.bits
+        magic_stride := io.magic.stride
         
     }
 
@@ -74,7 +80,7 @@ class UnrollSegment32(index: Int, maxOffsetBitWidth: Int) extends Module
     when (vreg_1) // cycle 1
     {
         reg := magic_res // cycle 1
-        remreg := (io.inValue.bits - (magic_res*io.magic.stride)) // cycle 1
+        remreg := (inBits - (magic_res*magic_stride)) // cycle 1
       //  SynthesizePrintf("vreg(%d) %d %d\n", index.U, vreg_1, vreg_2)
     }
 
@@ -87,6 +93,7 @@ class UnrollSegment32(index: Int, maxOffsetBitWidth: Int) extends Module
     {
         //SynthesizePrintf("(UnrollSegment32_%d) vreg_1 in=%d --> div %d rem %d\n", index.U, io.inValue.bits, reg, remreg)
     }
+
 
     io.index.valid := vreg_2 // cycle 2
     io.index.bits := reg // cycle 2

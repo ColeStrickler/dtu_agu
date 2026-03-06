@@ -43,6 +43,63 @@ case class AGUParams
 )
 
 
+
+case class LayerConfig(
+  nAdd: Int,
+  nMult: Int,
+  nSub: Int,
+  nPassThru: Int
+) {
+    def GetTotalFuncUnits(): Int = nAdd + nMult + nSub + nPassThru
+}
+
+
+case class AGUParams2
+(
+    maxOutStatements: Int = 1,
+    val layerCfgs: Seq[LayerConfig] = Seq(
+        LayerConfig(4,2,1,3),
+        LayerConfig(2,2,1,4),
+        LayerConfig(1,0,1,2),
+        LayerConfig(1,0,1,2),
+        LayerConfig(1,0,1,2),
+    ),
+    nLayers: Int = 5,
+    bitwidth : Int = 32,
+    nLoopRegs : Int = 5,
+    nConstRegs : Int = 6,
+    nConstArray : Int = 1,
+    nConstArraySize : Int = 32,
+    regAddress : Int = 0x4000000,
+    controlBeatBytes : Int = 8,
+    maxVarOutputs : Int = 2,
+) {
+    require(layerCfgs.length == nLayers)
+
+    def GetTotalFuncUnitsLayer(layer: Int) : Int = {
+        layerCfgs(layer).GetTotalFuncUnits()
+    }
+    def GetLayerAddUnits(layer: Int) : Int = {
+        layerCfgs(layer).nAdd
+    }
+    def GetLayerMultUnits(layer: Int) : Int = {
+        layerCfgs(layer).nMult
+    }
+    def GetLayerSubUnits(layer: Int) : Int = {
+        layerCfgs(layer).nSub
+    }
+    def GetLayerPassThruUnits(layer: Int) : Int = {
+        layerCfgs(layer).nPassThru
+    }
+
+}
+
+
+
+
+
+
+
 class AGUTop(params : AGUParams, config: Int = 0, maxOffsetBitWidth : Int)(implicit p: Parameters) extends LazyModule 
 {
 
@@ -404,7 +461,7 @@ class AGUTop(params : AGUParams, config: Int = 0, maxOffsetBitWidth : Int)(impli
 
         when (config_reset)
         {
-            SynthesizePrintf("configReset=true\n")
+            //SynthesizePrintf("configReset=true\n")
             // zero all routing config
             RoutingConfig.foreach(i => i.foreach(j => j.foreach(k => k.foreach(l => l := NULL_ROUTE.U))))// ignore value
             usedForLoops := 1.U
@@ -427,6 +484,8 @@ class AGUTop(params : AGUParams, config: Int = 0, maxOffsetBitWidth : Int)(impli
 
             // invalidate all layers
             validAtLayer.foreach(f => f := false.B)    
+
+            config_reset := false.B
         }
 
 
