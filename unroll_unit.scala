@@ -6,14 +6,14 @@ import chisel3.util._
 //import midas.targetutils.SynthesizePrintf
 
 
-case class UnrolledInitBundle(params: AGUParams, maxOffsetBitWidth: Int) extends Bundle
+case class UnrolledInitBundle(params: AGUParams2, maxOffsetBitWidth: Int) extends Bundle
 {
     val OutStmtStart = Output(UInt(log2Ceil(params.maxOutStatements).W))
     val RegInitValues = Output(Vec(params.nLoopRegs, UInt(maxOffsetBitWidth.W)))
 }
 
 
-case class UnrollUnitIO(params: AGUParams, maxOffsetBitWidth: Int) extends Bundle
+case class UnrollUnitIO(params: AGUParams2, maxOffsetBitWidth: Int) extends Bundle
 {
     val AddressIn = Flipped(Decoupled(UInt(maxOffsetBitWidth.W))) 
     val nForLoopsActive = Input(UInt(log2Ceil(params.nLoopRegs).W))
@@ -25,7 +25,7 @@ case class UnrollUnitIO(params: AGUParams, maxOffsetBitWidth: Int) extends Bundl
 }
 
 
-class UnrollUnit(params: AGUParams, maxOffsetBitWidth: Int) extends Module
+class UnrollUnit(params: AGUParams2, maxOffsetBitWidth: Int) extends Module
 {
     val io = IO(new UnrollUnitIO(params, maxOffsetBitWidth))
     val shift_divider = Module(new ShiftDivider(maxOffsetBitWidth))

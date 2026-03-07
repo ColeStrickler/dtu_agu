@@ -8,11 +8,11 @@ import midas.targetutils.SynthesizePrintf
 
 
 
-class LayerRouter(params: AGUParams, nInputs: Int, nOutputs: Int, outputSize : Int, bitwidth: Int, maxOutputs: Int, layer: Int) extends Module 
+class LayerRouter(params: AGUParams2, nInputs: Int, nOutputs: Int, outputSize : Int, bitwidth: Int, maxOutputs: Int, layer: Int) extends Module 
 {
 
     val NULL_ROUTE : Int = {
-        val totalFuncUnits = params.nAdd + params.nMult + params.nPassthru + params.nSub
+        val totalFuncUnits = params.GetMaxFuncUnits()
         val bits = log2Ceil(totalFuncUnits+1)
         (math.pow(2, bits)-1).toInt
         //if (math.pow(2, bits)-1 == totalFuncUnits)

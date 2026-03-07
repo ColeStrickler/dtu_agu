@@ -6,11 +6,11 @@ import chisel3.util._
 import firrtl.options.TargetDirAnnotation
 //import midas.targetutils.SynthesizePrintf
 
-class AGUDatapath(params: AGUParams, nLoopRegs : Int, nConstRegs: Int, nLayers: Int, nMultUnits: Int, nAddUnits: Int, nPassthru: Int, maxVarOutputs: Int, maxOffsetBitWidth: Int) extends Module
+class AGUDatapath(params: AGUParams2, nLoopRegs : Int, nConstRegs: Int, nLayers: Int, maxVarOutputs: Int, maxOffsetBitWidth: Int) extends Module
 {
 
     val NULL_ROUTE : Int = {
-            val totalFuncUnits = params.nAdd + params.nMult + params.nPassthru + params.nSub
+            val totalFuncUnits = params.GetMaxFuncUnits()
             val bits = log2Ceil(totalFuncUnits + 1)
             (math.pow(2, bits)-1).toInt
             //if (math.pow(2, bits)-1 == totalFuncUnits)
@@ -21,12 +21,21 @@ class AGUDatapath(params: AGUParams, nLoopRegs : Int, nConstRegs: Int, nLayers: 
     val routerRegBitsNeeded = log2Ceil(NULL_ROUTE) + 1
      println(s"datapath regBit $routerRegBitsNeeded")
     val bitwidth = 32
-    val totalFuncUnits = nAddUnits + nMultUnits + nPassthru + params.nSub
+   // val totalFuncUnits = nAddUnits + nMultUnits + nPassthru + params.nSub
     val io = IO(new Bundle{
         val doGen = Input(Bool())
         val output = Output(UInt(maxOffsetBitWidth.W))
         val reset = Input(Bool())
-        val RoutingConfigIn = Input(Vec(nLayers+1, Vec(totalFuncUnits, Vec(maxVarOutputs, UInt(routerRegBitsNeeded.W)))))
+        val RoutingConfigIn = Input(
+            VecInit(
+                Seq.tabulate(nLayers + 1) { layer =>
+                    Vec(
+                        params.GetTotalFuncUnitsLayer(layer),
+                        Vec(maxVarOutputs, UInt(routerRegBitsNeeded.W))
+                    )
+                }
+            )
+)
         val StallLayer = Input(Vec(nLayers+1, Bool()))
         val data_size = Input(UInt(6.W))                       // used by agu
 
@@ -80,7 +89,7 @@ class AGUDatapath(params: AGUParams, nLoopRegs : Int, nConstRegs: Int, nLayers: 
     val AddLayers = VecInit(
         (0 until nLayers).map { layerIdx =>
             VecInit(
-            (0 until nAddUnits).map { unitIdx =>
+            (0 until params.GetLayerAddUnits(layerIdx)).map { unitIdx =>
                 val addUnit = Module(new AddUnit(maxOffsetBitWidth, 2, layerIdx)) // pass layerIdx
                 addUnit.io
             }
@@ -91,7 +100,7 @@ class AGUDatapath(params: AGUParams, nLoopRegs : Int, nConstRegs: Int, nLayers: 
     val MultLayers = VecInit(
         (0 until nLayers).map { layerIdx =>
             VecInit(
-            (0 until nMultUnits).map { unitIdx =>
+            (0 until params.GetLayerMultUnits(layerIdx)).map { unitIdx =>
                 val multUnit = Module(new MultUnit(maxOffsetBitWidth, layerIdx)) // pass layerIdx
                 multUnit.io
             }
@@ -99,11 +108,20 @@ class AGUDatapath(params: AGUParams, nLoopRegs : Int, nConstRegs: Int, nLayers: 
         }
     )
 
-    val nUnits = nAddUnits + nMultUnits + nPassthru + params.nSub
-    val PassThru = WireInit(VecInit(Seq.fill(nLayers)(VecInit(Seq.fill(nPassthru)(0.U(bitwidth.W))))))
+        val PassThru = WireInit(
+            VecInit(
+                (0 until nLayers).map { layerIdx =>
+                    VecInit(
+                        (0 until params.GetLayerPassThruUnits(layerIdx)).map { _ =>
+                        0.U(bitwidth.W)
+                        }
+                    )
+                }
+            )
+        )
     val routing = VecInit(
         (0 to nLayers).map { layerIdx =>
-            val router = Module(new LayerRouter(params, nUnits, nUnits, 2, maxOffsetBitWidth, maxVarOutputs, layerIdx)) // you can pass layerIdx if needed
+            val router = Module(new LayerRouter(params, params.GetRoutingInputsLayer(layerIdx), params.GetRoutingInputsLayer(layerIdx+1), 2, maxOffsetBitWidth, maxVarOutputs, layerIdx)) // you can pass layerIdx if needed
             router.io
         }
     )
@@ -111,7 +129,7 @@ class AGUDatapath(params: AGUParams, nLoopRegs : Int, nConstRegs: Int, nLayers: 
     val SubLayers = VecInit(
         (0 until nLayers).map { layerIdx =>
             VecInit(
-            (0 until params.nSub).map { unitIdx =>
+            (0 until params.GetLayerSubUnits(layerIdx)).map { unitIdx =>
                 val subUnit = Module(new SubUnit(maxOffsetBitWidth, 2, layerIdx)) // pass layerIdx
                 subUnit.io
             }
@@ -153,15 +171,15 @@ class AGUDatapath(params: AGUParams, nLoopRegs : Int, nConstRegs: Int, nLayers: 
     {
         routing(0).inputs(i + nConstRegs + params.nConstArray) := LoopRegs(i)
     }
-    assert(nLoopRegs + params.nConstArray + nConstRegs <= nUnits)
+    //assert(nLoopRegs + params.nConstArray + nConstRegs <= nUnits)
     // make sure everything is initialized
-    if (nLoopRegs + params.nConstArray + nConstRegs < nUnits)
-    {
-        for (i <- (nLoopRegs + params.nConstArray + nConstRegs) until nUnits)
-        {
-            routing(0).inputs(i) := NULL_ROUTE.U
-        }
-    }
+    //if (nLoopRegs + params.nConstArray + nConstRegs < nUnits)
+    //{
+    //    for (i <- (nLoopRegs + params.nConstArray + nConstRegs) until nUnits)
+    //    {
+    //        routing(0).inputs(i) := NULL_ROUTE.U
+    //    }
+    //}
 
 
     
@@ -173,7 +191,7 @@ class AGUDatapath(params: AGUParams, nLoopRegs : Int, nConstRegs: Int, nLayers: 
     */
     for (i <- 0 until nLayers)
     {
-        for (j <- 0 until nAddUnits)
+        for (j <- 0 until params.GetLayerAddUnits(i))
         {
             //SynthesizePrintf("layer%d addUnit%d <-- input %d\n", i.U, j.U, routing(i).outputs(j)(0))
             //SynthesizePrintf("layer%d addUnit%d <-- input %d\n", i.U, j.U, routing(i).outputs(j)(1))
@@ -182,22 +200,22 @@ class AGUDatapath(params: AGUParams, nLoopRegs : Int, nConstRegs: Int, nLayers: 
             routing(i+1).inputs(j) := AddLayers(i)(j).output
         }
 
-        for (j <- 0 until nMultUnits)
+        for (j <- 0 until params.GetLayerMultUnits(i))
         {
-            MultLayers(i)(j).inA := routing(i).outputs(j+nAddUnits)(0)
-            MultLayers(i)(j).inB := routing(i).outputs(j+nAddUnits)(1)
+            MultLayers(i)(j).inA := routing(i).outputs(j+params.GetLayerAddUnits(i))(0)
+            MultLayers(i)(j).inB := routing(i).outputs(j+params.GetLayerAddUnits(i))(1)
             //for (x <- 2 until 4)
             //{
             //    assert(routing(i).outputs(j)(x) === 0.U)
             //}
 
-            routing(i+1).inputs(j+nAddUnits) := MultLayers(i)(j).out
+            routing(i+1).inputs(j+params.GetLayerAddUnits(i)) := MultLayers(i)(j).out
         }
 
 
-        for (j <- 0 until nPassthru)
+        for (j <- 0 until params.GetLayerPassThruUnits(i))
         {
-            PassThru(i)(j) := routing(i).outputs(j+nAddUnits+nMultUnits)(0)
+            PassThru(i)(j) := routing(i).outputs(j+params.GetLayerAddUnits(i)+params.GetLayerMultUnits(i))(0)
             //for (x <- 1 until 2)
             //{
             //    assert(routing(i).outputs(j)(x) === 0.U)
@@ -207,15 +225,15 @@ class AGUDatapath(params: AGUParams, nLoopRegs : Int, nConstRegs: Int, nLayers: 
                 //SynthesizePrintf("PassThru(%d)(%d) %d\n", i.U, j.U, PassThru(i)(j))
             }
             
-            routing(i+1).inputs(j+nAddUnits+nMultUnits) := PassThru(i)(j)
+            routing(i+1).inputs(j+params.GetLayerAddUnits(i)+params.GetLayerMultUnits(i)) := PassThru(i)(j)
 
         }
 
-        for (j <- 0 until params.nSub)
+        for (j <- 0 until params.GetLayerSubUnits(i))
         {
-            SubLayers(i)(j).inA := routing(i).outputs(j+nAddUnits+nMultUnits+nPassthru)(0)
-            SubLayers(i)(j).inB := routing(i).outputs(j+nAddUnits+nMultUnits+nPassthru)(1)
-            routing(i+1).inputs(j+nAddUnits+nMultUnits+nPassthru) := SubLayers(i)(j).output
+            SubLayers(i)(j).inA := routing(i).outputs(j+params.GetLayerAddUnits(i)+params.GetLayerMultUnits(i)+params.GetLayerPassThruUnits(i))(0)
+            SubLayers(i)(j).inB := routing(i).outputs(j+params.GetLayerAddUnits(i)+params.GetLayerMultUnits(i)+params.GetLayerPassThruUnits(i))(1)
+            routing(i+1).inputs(j+params.GetLayerAddUnits(i)+params.GetLayerMultUnits(i)+params.GetLayerPassThruUnits(i)) := SubLayers(i)(j).output
         }
 
     }
@@ -236,6 +254,6 @@ class AGUDatapath(params: AGUParams, nLoopRegs : Int, nConstRegs: Int, nLayers: 
     
 
 
-    io.output := routing(nLayers).outputs(nAddUnits+nMultUnits)(0) << shift // output will always come from last pass thru --> some inefficiency here
+    io.output := routing(nLayers).outputs(0)(0) << shift // output will always come from last pass thru --> some inefficiency here
 }
 

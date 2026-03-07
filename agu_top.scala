@@ -60,9 +60,10 @@ case class AGUParams2
     val layerCfgs: Seq[LayerConfig] = Seq(
         LayerConfig(4,2,1,3),
         LayerConfig(2,2,1,4),
-        LayerConfig(1,0,1,2),
-        LayerConfig(1,0,1,2),
-        LayerConfig(1,0,1,2),
+        LayerConfig(1,1,1,2),
+        LayerConfig(1,1,1,2),
+        LayerConfig(1,1,1,2),
+        LayerConfig(0,0,1,0),
     ),
     nLayers: Int = 5,
     bitwidth : Int = 32,
@@ -74,10 +75,13 @@ case class AGUParams2
     controlBeatBytes : Int = 8,
     maxVarOutputs : Int = 2,
 ) {
-    require(layerCfgs.length == nLayers)
+    require(layerCfgs.length == nLayers+1)
 
     def GetTotalFuncUnitsLayer(layer: Int) : Int = {
-        layerCfgs(layer).GetTotalFuncUnits()
+        if (layer >=  nLayers)
+            GetMaxFuncUnits()
+        else
+            layerCfgs(layer).GetTotalFuncUnits()
     }
     def GetLayerAddUnits(layer: Int) : Int = {
         layerCfgs(layer).nAdd
@@ -92,6 +96,23 @@ case class AGUParams2
         layerCfgs(layer).nPassThru
     }
 
+    def GetMaxFuncUnits() : Int = {
+        var ret : Int = 0
+        for (i <- 0 until nLayers)
+        {
+            ret = math.max(ret, GetTotalFuncUnitsLayer(i))
+        }
+        ret
+    }
+
+    def GetRoutingInputsLayer(layer: Int): Int = {
+        if (layer == 0)
+            nLoopRegs + nConstRegs + nConstArray
+        else if (layer >= nLayers)
+            1
+        else
+            GetTotalFuncUnitsLayer(layer)
+    }
 }
 
 
@@ -100,7 +121,7 @@ case class AGUParams2
 
 
 
-class AGUTop(params : AGUParams, config: Int = 0, maxOffsetBitWidth : Int)(implicit p: Parameters) extends LazyModule 
+class AGUTop(params : AGUParams2, config: Int = 0, maxOffsetBitWidth : Int)(implicit p: Parameters) extends LazyModule 
 {
 
 
@@ -108,7 +129,7 @@ class AGUTop(params : AGUParams, config: Int = 0, maxOffsetBitWidth : Int)(impli
         Compute parameterization. Will be used elsewhere
     */
     val NULL_ROUTE : Int = {
-        val totalFuncUnits = params.nAdd + params.nMult + params.nPassthru + params.nSub
+        val totalFuncUnits = params.GetMaxFuncUnits()
         val bits = log2Ceil(totalFuncUnits + 1)
         (math.pow(2, bits)-1).toInt
         //if (math.pow(2, bits)-1 == totalFuncUnits)
@@ -132,7 +153,7 @@ class AGUTop(params : AGUParams, config: Int = 0, maxOffsetBitWidth : Int)(impli
 
     lazy val module = new Impl
     class Impl extends LazyModuleImp(this) {
-        val totalFuncUnits = params.nAdd+params.nMult+params.nPassthru+params.nSub
+        //val totalFuncUnits = params.nAdd+params.nMult+params.nPassthru+params.nSub
         val io = IO(new Bundle {
             val reqIO = Flipped(new RequestorAGUPort(maxOffsetBitWidth))
             // config out to datapath
@@ -201,9 +222,15 @@ class AGUTop(params : AGUParams, config: Int = 0, maxOffsetBitWidth : Int)(impli
             We can cut the size of this in half if we set width of each register to log2ceil(totalFucncUnits)
             I also believe we can cut maxVarOutputs to 2
         */
-        val RoutingConfig = RegInit(VecInit(Seq.fill(params.maxOutStatements)(
-                                        VecInit(Seq.fill(params.nLayers+1)(
-                                            VecInit(Seq.fill(totalFuncUnits)(VecInit(Seq.fill(params.maxVarOutputs)(NULL_ROUTE.U(routerRegBitsNeeded.W))))))))))
+        val RoutingConfig: Seq[Seq[Seq[Vec[UInt]]]] = Seq.tabulate(params.maxOutStatements) { _ =>
+        Seq.tabulate(params.nLayers + 1) { layer =>
+            val nUnits = params.GetTotalFuncUnitsLayer(layer)
+            VecInit(Seq.tabulate(nUnits) { _ =>
+            VecInit(Seq.fill(params.maxVarOutputs)(NULL_ROUTE.U(routerRegBitsNeeded.W)))
+            })
+        }
+        }
+                                                    
          println(s"agutop regBit $routerRegBitsNeeded")
 
 
@@ -223,7 +250,7 @@ class AGUTop(params : AGUParams, config: Int = 0, maxOffsetBitWidth : Int)(impli
         val mmregBuf = ArrayBuffer[(Int, Seq[RegField])]()
         for (i <- 0 until params.maxOutStatements) {
             for (j <- 0 until params.nLayers+1) {
-                for (k <- 0 until totalFuncUnits) {
+                for (k <- 0 until params.GetTotalFuncUnitsLayer(j)) {
                     for (l <- 0 until params.maxVarOutputs)
                     {
                         mmregBuf += (cell -> Seq(RegField(routerRegBitsNeeded, RoutingConfig(i)(j)(k)(l), RegFieldDesc("agurouting", "agurouting"))))
@@ -233,7 +260,7 @@ class AGUTop(params : AGUParams, config: Int = 0, maxOffsetBitWidth : Int)(impli
             }
         }
         
-        val bytesUsedRouting = bytesPerCell*params.maxOutStatements*(params.nLayers+1)*totalFuncUnits*params.maxVarOutputs
+        val bytesUsedRouting = bytesPerCell*params.maxOutStatements*(params.nLayers+1)*params.GetMaxFuncUnits()*params.maxVarOutputs
         val reg_reset = ((0xf00) -> Seq(RegField(1, config_reset, RegFieldDesc("reset", "reset"))))
         val usedOutStatementsReg = ((0xf01) -> Seq(RegField(8, usedOutStatements, RegFieldDesc("nOutStatements", "nOutStatements"))))
         val usedForLoopsReg = ((0xf02) -> Seq(RegField(8, usedForLoops, RegFieldDesc("nForLoops", "nForLoops"))))
@@ -451,7 +478,16 @@ class AGUTop(params : AGUParams, config: Int = 0, maxOffsetBitWidth : Int)(impli
         
 
         val RoutingConfigOut = Wire(
-            Vec(params.nLayers+1, Vec(totalFuncUnits, Vec(params.maxVarOutputs, UInt(routerRegBitsNeeded.W))))
+            VecInit(
+                Seq.tabulate(params.nLayers + 1) { layer =>
+                Wire(
+                    Vec(
+                        params.GetTotalFuncUnitsLayer(layer),
+                        Vec(params.maxVarOutputs, UInt(routerRegBitsNeeded.W))
+                    )
+                )
+                }
+            )
         )
         for (i <- 0 until params.nLayers+1)
         {
@@ -489,7 +525,7 @@ class AGUTop(params : AGUParams, config: Int = 0, maxOffsetBitWidth : Int)(impli
         }
 
 
-        val dpath = Module(new AGUDatapath(params, params.nLoopRegs, params.nConstRegs, params.nLayers, params.nMult, params.nAdd, params.nPassthru, params.maxVarOutputs, maxOffsetBitWidth))
+        val dpath = Module(new AGUDatapath(params, params.nLoopRegs, params.nConstRegs, params.nLayers, params.maxVarOutputs, maxOffsetBitWidth))
         
 
         dpath.io.doGen := readyNewGen
