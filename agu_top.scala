@@ -97,7 +97,7 @@ case class AGUParams2
     }
 
     def GetMaxFuncUnits() : Int = {
-        var ret : Int = 0
+        var ret : Int = nLoopRegs + nConstRegs + nConstArray
         for (i <- 0 until nLayers)
         {
             ret = math.max(ret, GetTotalFuncUnitsLayer(i))
@@ -108,10 +108,10 @@ case class AGUParams2
     def GetRoutingInputsLayer(layer: Int): Int = {
         if (layer == 0)
             nLoopRegs + nConstRegs + nConstArray
-        else if (layer >= nLayers)
+        else if (layer > nLayers)
             1
         else
-            GetTotalFuncUnitsLayer(layer)
+            GetTotalFuncUnitsLayer(layer-1)
     }
 }
 
@@ -222,15 +222,21 @@ class AGUTop(params : AGUParams2, config: Int = 0, maxOffsetBitWidth : Int)(impl
             We can cut the size of this in half if we set width of each register to log2ceil(totalFucncUnits)
             I also believe we can cut maxVarOutputs to 2
         */
-        val RoutingConfig: Seq[Seq[Seq[Vec[UInt]]]] = Seq.tabulate(params.maxOutStatements) { _ =>
-        Seq.tabulate(params.nLayers + 1) { layer =>
-            val nUnits = params.GetTotalFuncUnitsLayer(layer)
-            VecInit(Seq.tabulate(nUnits) { _ =>
-            VecInit(Seq.fill(params.maxVarOutputs)(NULL_ROUTE.U(routerRegBitsNeeded.W)))
-            })
-        }
-        }
-                                                    
+        val RoutingConfig = RegInit(VecInit(Seq.tabulate(params.maxOutStatements) { _ =>
+            VecInit(
+                Seq.tabulate(params.nLayers + 1) { layer =>
+                val nUnits = params.GetMaxFuncUnits()
+                VecInit(
+                    Seq.fill(nUnits)(
+                    VecInit(
+                        Seq.fill(params.maxVarOutputs)(
+                        NULL_ROUTE.U(routerRegBitsNeeded.W)
+                        )
+                    )
+                    )
+                )
+                })}))
+                                  
          println(s"agutop regBit $routerRegBitsNeeded")
 
 
@@ -478,17 +484,18 @@ class AGUTop(params : AGUParams2, config: Int = 0, maxOffsetBitWidth : Int)(impl
         
 
         val RoutingConfigOut = Wire(
-            VecInit(
-                Seq.tabulate(params.nLayers + 1) { layer =>
-                Wire(
-                    Vec(
-                        params.GetTotalFuncUnitsLayer(layer),
-                        Vec(params.maxVarOutputs, UInt(routerRegBitsNeeded.W))
-                    )
+            Vec(
+                params.nLayers + 1,                 // outer Vec
+                Vec(
+                params.GetMaxFuncUnits(),         // per layer
+                Vec(
+                    params.maxVarOutputs,           // per unit
+                    UInt(routerRegBitsNeeded.W)     // leaf type
                 )
-                }
+                )
             )
-        )
+            )
+        
         for (i <- 0 until params.nLayers+1)
         {
             RoutingConfigOut(i) := RoutingConfig(outStatementAtLayer(i))(i)       

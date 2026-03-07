@@ -26,16 +26,7 @@ class AGUDatapath(params: AGUParams2, nLoopRegs : Int, nConstRegs: Int, nLayers:
         val doGen = Input(Bool())
         val output = Output(UInt(maxOffsetBitWidth.W))
         val reset = Input(Bool())
-        val RoutingConfigIn = Input(
-            VecInit(
-                Seq.tabulate(nLayers + 1) { layer =>
-                    Vec(
-                        params.GetTotalFuncUnitsLayer(layer),
-                        Vec(maxVarOutputs, UInt(routerRegBitsNeeded.W))
-                    )
-                }
-            )
-)
+        val RoutingConfigIn = Input(Vec(nLayers+1, Vec(params.GetMaxFuncUnits(), Vec(maxVarOutputs, UInt(routerRegBitsNeeded.W)))))
         val StallLayer = Input(Vec(nLayers+1, Bool()))
         val data_size = Input(UInt(6.W))                       // used by agu
 
@@ -86,7 +77,7 @@ class AGUDatapath(params: AGUParams2, nLoopRegs : Int, nConstRegs: Int, nLayers:
     */
 
     
-    val AddLayers = VecInit(
+    val AddLayers =
         (0 until nLayers).map { layerIdx =>
             VecInit(
             (0 until params.GetLayerAddUnits(layerIdx)).map { unitIdx =>
@@ -95,9 +86,9 @@ class AGUDatapath(params: AGUParams2, nLoopRegs : Int, nConstRegs: Int, nLayers:
             }
             )
         }
-    )
+    
 
-    val MultLayers = VecInit(
+    val MultLayers = 
         (0 until nLayers).map { layerIdx =>
             VecInit(
             (0 until params.GetLayerMultUnits(layerIdx)).map { unitIdx =>
@@ -106,27 +97,21 @@ class AGUDatapath(params: AGUParams2, nLoopRegs : Int, nConstRegs: Int, nLayers:
             }
             )
         }
-    )
+    
 
-        val PassThru = WireInit(
-            VecInit(
-                (0 until nLayers).map { layerIdx =>
-                    VecInit(
-                        (0 until params.GetLayerPassThruUnits(layerIdx)).map { _ =>
-                        0.U(bitwidth.W)
-                        }
-                    )
+        val PassThru = (0 until nLayers).map { layerIdx =>
+                    Wire(Vec( params.GetLayerPassThruUnits(layerIdx), UInt(bitwidth.W)))
                 }
-            )
-        )
-    val routing = VecInit(
+            
+        
+    val routing = 
         (0 to nLayers).map { layerIdx =>
             val router = Module(new LayerRouter(params, params.GetRoutingInputsLayer(layerIdx), params.GetRoutingInputsLayer(layerIdx+1), 2, maxOffsetBitWidth, maxVarOutputs, layerIdx)) // you can pass layerIdx if needed
             router.io
         }
-    )
+    
 
-    val SubLayers = VecInit(
+    val SubLayers = 
         (0 until nLayers).map { layerIdx =>
             VecInit(
             (0 until params.GetLayerSubUnits(layerIdx)).map { unitIdx =>
@@ -135,16 +120,23 @@ class AGUDatapath(params: AGUParams2, nLoopRegs : Int, nConstRegs: Int, nLayers:
             }
             )
         }
-    )
+    
 
 
 
-
+    
     /*
         Map control to routers
     */
     routing.zipWithIndex.foreach { case (router, i) => 
-        router.routing := io.RoutingConfigIn(i)    
+
+        for (j <- 0 until params.GetRoutingInputsLayer(i))
+        {
+            println(j)
+            println(router.routing.length, io.RoutingConfigIn(i).length)
+            router.routing(j) := io.RoutingConfigIn(i)(j)
+        }
+
         router.stall := io.StallLayer(i)
     }
 
