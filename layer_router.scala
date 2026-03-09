@@ -77,7 +77,7 @@ class LayerRouter(params: AGUParams2, nInputs: Int, nOutputs: Int, outputSize : 
                //
                 //assert(maxOutputs == 2) // our routing logic only works when we have 2
 
-
+                SynthesizePrintf("(Layer%d) %d-->%d idx=%d [%d]\n", layer.U, i.U, sel_output, idx, buffer(i))
                 // when (idx >= 2.U)
                 //{
                 //    //SynthesizePrintf("idx > 2 (%d)(%d) == %d", i.U, j.U, sel_output)

@@ -230,7 +230,7 @@ class AGUTop(params : AGUParams2, config: Int = 0, maxOffsetBitWidth : Int)(impl
                     Seq.fill(nUnits)(
                     VecInit(
                         Seq.fill(params.maxVarOutputs)(
-                        NULL_ROUTE.U(routerRegBitsNeeded.W)
+                            NULL_ROUTE.U(routerRegBitsNeeded.W)
                         )
                     )
                     )
@@ -256,7 +256,7 @@ class AGUTop(params : AGUParams2, config: Int = 0, maxOffsetBitWidth : Int)(impl
         val mmregBuf = ArrayBuffer[(Int, Seq[RegField])]()
         for (i <- 0 until params.maxOutStatements) {
             for (j <- 0 until params.nLayers+1) {
-                for (k <- 0 until params.GetTotalFuncUnitsLayer(j)) {
+                for (k <- 0 until params.GetMaxFuncUnits()) { // go ahead and map all, even unneeded
                     for (l <- 0 until params.maxVarOutputs)
                     {
                         mmregBuf += (cell -> Seq(RegField(routerRegBitsNeeded, RoutingConfig(i)(j)(k)(l), RegFieldDesc("agurouting", "agurouting"))))

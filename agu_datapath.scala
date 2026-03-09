@@ -4,7 +4,7 @@ import chisel3._
 //import chisel3.stage.{ChiselStage, ChiselGeneratorAnnotation}
 import chisel3.util._
 import firrtl.options.TargetDirAnnotation
-//import midas.targetutils.SynthesizePrintf
+import midas.targetutils.SynthesizePrintf
 
 class AGUDatapath(params: AGUParams2, nLoopRegs : Int, nConstRegs: Int, nLayers: Int, maxVarOutputs: Int, maxOffsetBitWidth: Int) extends Module
 {
@@ -56,8 +56,8 @@ class AGUDatapath(params: AGUParams2, nLoopRegs : Int, nConstRegs: Int, nLayers:
        // SynthesizePrintf("[AGUDatapath] io.doGen %d\n", io.doGen)
         for (i <- 0 until nLoopRegs)
         {
-          //  SynthesizePrintf("loopreg(%d) %d\n", i.U, LoopRegs(i))
-           // SynthesizePrintf("loopincreg(%d) %d\n", i.U, LoopIncRegs(i))
+            SynthesizePrintf("loopreg(%d) %d\n", i.U, LoopRegs(i))
+            SynthesizePrintf("loopincreg(%d) %d\n", i.U, LoopIncRegs(i))
         }
 
         for (i <- 0 until nConstRegs)
