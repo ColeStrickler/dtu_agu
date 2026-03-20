@@ -58,12 +58,12 @@ case class AGUParams2
 (
     maxOutStatements: Int = 1,
     val layerCfgs: Seq[LayerConfig] = Seq(
-        LayerConfig(4,2,1,3),
+        LayerConfig(2,4,2,4),
         LayerConfig(2,2,1,4),
+        LayerConfig(2,2,1,2),
         LayerConfig(1,1,1,2),
-        LayerConfig(1,1,1,2),
-        LayerConfig(1,1,1,2),
-        LayerConfig(0,0,1,0),
+        LayerConfig(1,1,1,1),
+        LayerConfig(0,0,0,1),
     ),
     nLayers: Int = 5,
     bitwidth : Int = 32,
