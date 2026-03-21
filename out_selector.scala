@@ -2,7 +2,7 @@ package agu
 
 import chisel3._
 import chisel3.util._
-
+import midas.targetutils.SynthesizePrintf
 
 
 
@@ -30,7 +30,12 @@ class OutSelector(LoopIndexCount: Int, MaxOutStatements: Int, bitwidth: Int) ext
 
     val conditionedIdx = io.loopIndices(io.conditionedIndex)
 
+    for (j <- 0 until io.loopIndices.length)
+    {
+       // SynthesizePrintf("loop index %d conditioned index %d, loopIdxVal %d\n", j.U, io.conditionedIndex, io.loopIndices(j))
+    }
 
+    
 
     when (!io.useConditional)
     {
@@ -40,11 +45,13 @@ class OutSelector(LoopIndexCount: Int, MaxOutStatements: Int, bitwidth: Int) ext
     {
         when(isEven(conditionedIdx))
         {
+            SynthesizePrintf("isEven! %d\n", io.outOffset)
             io.outStatement :=  io.outOffset
         }
         .otherwise
         {
             io.outStatement := io.outStatementsPerCond + io.outOffset
+            SynthesizePrintf("NotisEven! %d\n", io.outStatementsPerCond + io.outOffset)
         }
     }
     .otherwise

@@ -26,7 +26,7 @@ import mainargs.TokensReader.Constant
 
 case class AGUParams
 (
-    maxOutStatements: Int = 1,
+    maxOutStatements: Int = 2,
     nLayers: Int = 5,
     nAdd : Int = 3,
     nMult : Int = 4,
@@ -56,7 +56,7 @@ case class LayerConfig(
 
 case class AGUParams2
 (
-    maxOutStatements: Int = 1,
+    maxOutStatements: Int = 2,
     val layerCfgs: Seq[LayerConfig] = Seq(
         LayerConfig(2,4,2,4),
         LayerConfig(2,2,1,4),
@@ -282,7 +282,10 @@ class AGUTop(params : AGUParams2, config: Int = 0, maxOffsetBitWidth : Int)(impl
         mmregBuf += reg_reset
         mmregBuf += usedOutStatementsReg
         mmregBuf += usedForLoopsReg
-        
+        mmregBuf += outStatementsPerCondReg
+        mmregBuf += outSelUseCondReg
+        mmregBuf += outSelCondIdxReg
+        mmregBuf += outSelUseEvenCondReg
 
 
 
@@ -474,6 +477,10 @@ class AGUTop(params : AGUParams2, config: Int = 0, maxOffsetBitWidth : Int)(impl
 
 
         lastOutStmt := ((currentOutStatement + 1.U) % outStatementsPerCond) === 0.U
+        when (lastOutStmt && outStatementsPerCond =/= 0.U)
+        {
+         //   SynthesizePrintf("lastOutStmt! %d outStatementsPErCond %d, currentOutStatement %d, usedOut %d\n", lastOutStmt,  outStatementsPerCond, currentOutStatement, usedOutStatements)
+        }
 
         outSel.io.usedOutStatements := usedOutStatements
         outSel.io.outStatementsPerCond := outStatementsPerCond
@@ -496,10 +503,10 @@ class AGUTop(params : AGUParams2, config: Int = 0, maxOffsetBitWidth : Int)(impl
 
         when (readyNewGen)
         {
-          //  SynthesizePrintf("CurrentOutStatement %d, usedOutStatement %d\n", currentOutStatement, usedOutStatements)
+            SynthesizePrintf("CurrentOutStatement %d, usedOutStatement %d OutputOutStatement %d\n", currentOutStatement, usedOutStatements, outSel.io.outStatement)
             for (i <- 0 until params.nLoopRegs)
             {
-                //SynthesizePrintf("loopReg(%d) %d\n", i.U, LoopRegs(i))
+                SynthesizePrintf("loopReg(%d) %d\n", i.U, LoopRegs(i))
             }
         }
         
