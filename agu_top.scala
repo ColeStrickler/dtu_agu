@@ -170,6 +170,10 @@ class AGUTop(params : AGUParams2, config: Int = 0, maxOffsetBitWidth : Int)(impl
         */
         val nOutStatements = RegInit(1.U(log2Ceil(params.maxOutStatements+1).W))
         val usedOutStatements = RegInit(0.U(log2Ceil(params.maxOutStatements+1).W))
+        val outStatementsPerCond = RegInit(0.U(log2Ceil(params.maxOutStatements+1).W))
+        val outSelUseCond = RegInit(false.B)
+        val outSelCondIdx = RegInit(0.U(log2Ceil(params.maxOutStatements).W))
+        val outSelUseEvenCond = RegInit(false.B)
         val usedForLoops = RegInit(1.U(log2Ceil(params.nLoopRegs).W))
         val config_reset = RegInit(false.B)
 
@@ -270,6 +274,11 @@ class AGUTop(params : AGUParams2, config: Int = 0, maxOffsetBitWidth : Int)(impl
         val reg_reset = ((0xf00) -> Seq(RegField(1, config_reset, RegFieldDesc("reset", "reset"))))
         val usedOutStatementsReg = ((0xf01) -> Seq(RegField(8, usedOutStatements, RegFieldDesc("nOutStatements", "nOutStatements"))))
         val usedForLoopsReg = ((0xf02) -> Seq(RegField(8, usedForLoops, RegFieldDesc("nForLoops", "nForLoops"))))
+
+        val outStatementsPerCondReg = ((0xf03) -> Seq(RegField(8, outStatementsPerCond, RegFieldDesc("outStatementsPerCond", "outStatementsPerCond"))))
+        val outSelUseCondReg = ((0xf04) -> Seq(RegField(8, outSelUseCond, RegFieldDesc("outSelUseCond", "outSelUseCond"))))
+        val outSelCondIdxReg = ((0xf05) -> Seq(RegField(8, outSelCondIdx, RegFieldDesc("outSelCondIdx", "outSelCondIdx"))))
+        val outSelUseEvenCondReg = ((0xf06) -> Seq(RegField(8, outSelUseEvenCond, RegFieldDesc("outSelUseEvenCond", "outSelUseEvenCond"))))
         mmregBuf += reg_reset
         mmregBuf += usedOutStatementsReg
         mmregBuf += usedForLoopsReg
@@ -304,7 +313,7 @@ class AGUTop(params : AGUParams2, config: Int = 0, maxOffsetBitWidth : Int)(impl
             --> we made a change here, haven't yet made sure it will work
         */
         val stride = RegInit(VecInit(Seq.fill(params.nLoopRegs)(0.U(32.W))))
-        stride(0) := usedOutStatements
+        stride(0) := outStatementsPerCond
         for (i <- 1 until params.nLoopRegs)
         {
             stride(i) := stride(i-1) * LoopIncRegs(i-1)
@@ -422,6 +431,7 @@ class AGUTop(params : AGUParams2, config: Int = 0, maxOffsetBitWidth : Int)(impl
             [Control Plane]
         */
         val currentOutStatement = RegInit(0.U(8.W)) // which out statement do we send down the pipeline
+        
         val readyNewGen = Wire(Bool()) // will we send a new outstatement down the pipeline
         val outStatementAtLayer = RegInit(VecInit(Seq.fill(params.nLayers+1)(0.U(log2Ceil(params.maxOutStatements+1).W))))
         val validAtLayer = RegInit(VecInit(Seq.fill(params.nLayers+1)(false.B)))
@@ -453,15 +463,26 @@ class AGUTop(params : AGUParams2, config: Int = 0, maxOffsetBitWidth : Int)(impl
         }
         
 
-
+        val outSel = Module(new OutSelector(params.nLoopRegs, params.maxOutStatements, maxOffsetBitWidth))
         // shift in current outStatement
-        outStatementAtLayer := currentOutStatement +: outStatementAtLayer.init
+        outStatementAtLayer := outSel.io.outStatement +: outStatementAtLayer.init
 
 
         // increment currentOutStatement if it was used. If at the last one, go back to the first
         
 
-        lastOutStmt := ((currentOutStatement + 1.U) % usedOutStatements) === 0.U
+
+
+        lastOutStmt := ((currentOutStatement + 1.U) % outStatementsPerCond) === 0.U
+
+        outSel.io.usedOutStatements := usedOutStatements
+        outSel.io.outStatementsPerCond := outStatementsPerCond
+        outSel.io.loopIndices := LoopRegs
+        outSel.io.useConditional := outSelUseCond
+        outSel.io.conditionedIndex := outSelCondIdx
+        outSel.io.useEvenCond := outSelUseEvenCond
+        outSel.io.outOffset := currentOutStatement
+
 
         when(unroll_unit.io.UnrolledInit.fire)
         {
@@ -469,7 +490,7 @@ class AGUTop(params : AGUParams2, config: Int = 0, maxOffsetBitWidth : Int)(impl
             //SynthesizePrintf("Using outstmt %d\n", currentOutStatement)
         }
         .elsewhen (readyNewGen) {
-            currentOutStatement := (currentOutStatement + 1.U) % usedOutStatements
+            currentOutStatement := (currentOutStatement + 1.U) % outStatementsPerCond
         }
 
 
