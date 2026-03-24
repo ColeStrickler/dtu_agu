@@ -171,9 +171,10 @@ class AGUTop(params : AGUParams2, config: Int = 0, maxOffsetBitWidth : Int)(impl
         val nOutStatements = RegInit(1.U(log2Ceil(params.maxOutStatements+1).W))
         val usedOutStatements = RegInit(0.U(log2Ceil(params.maxOutStatements+1).W))
         val outStatementsPerCond = RegInit(0.U(log2Ceil(params.maxOutStatements+1).W))
-        val outSelUseCond = RegInit(false.B)
+        val outSelCondCode = RegInit(0.U(log2Ceil(6).W))
         val outSelCondIdx = RegInit(0.U(log2Ceil(params.maxOutStatements).W))
-        val outSelUseEvenCond = RegInit(false.B)
+        val outSelCondIdx2 = RegInit(0.U(log2Ceil(params.maxOutStatements).W))
+        //val outSelUseEvenCond = RegInit(false.B)
         val usedForLoops = RegInit(1.U(log2Ceil(params.nLoopRegs).W))
         val config_reset = RegInit(false.B)
 
@@ -276,16 +277,16 @@ class AGUTop(params : AGUParams2, config: Int = 0, maxOffsetBitWidth : Int)(impl
         val usedForLoopsReg = ((0xf02) -> Seq(RegField(8, usedForLoops, RegFieldDesc("nForLoops", "nForLoops"))))
 
         val outStatementsPerCondReg = ((0xf03) -> Seq(RegField(8, outStatementsPerCond, RegFieldDesc("outStatementsPerCond", "outStatementsPerCond"))))
-        val outSelUseCondReg = ((0xf04) -> Seq(RegField(8, outSelUseCond, RegFieldDesc("outSelUseCond", "outSelUseCond"))))
+        val outSelCondCodeReg = ((0xf04) -> Seq(RegField(8, outSelCondCode, RegFieldDesc("outSelCondCode", "outSelCondCode"))))
         val outSelCondIdxReg = ((0xf05) -> Seq(RegField(8, outSelCondIdx, RegFieldDesc("outSelCondIdx", "outSelCondIdx"))))
-        val outSelUseEvenCondReg = ((0xf06) -> Seq(RegField(8, outSelUseEvenCond, RegFieldDesc("outSelUseEvenCond", "outSelUseEvenCond"))))
+        val outSelCondIdxReg2 = ((0xf06) -> Seq(RegField(8, outSelCondIdx2, RegFieldDesc("outSelCondIdx2", "outSelCondIdx2"))))
         mmregBuf += reg_reset
         mmregBuf += usedOutStatementsReg
         mmregBuf += usedForLoopsReg
         mmregBuf += outStatementsPerCondReg
-        mmregBuf += outSelUseCondReg
+        mmregBuf += outSelCondCodeReg
         mmregBuf += outSelCondIdxReg
-        mmregBuf += outSelUseEvenCondReg
+        mmregBuf += outSelCondIdxReg2
 
 
 
@@ -485,9 +486,9 @@ class AGUTop(params : AGUParams2, config: Int = 0, maxOffsetBitWidth : Int)(impl
         outSel.io.usedOutStatements := usedOutStatements
         outSel.io.outStatementsPerCond := outStatementsPerCond
         outSel.io.loopIndices := LoopRegs
-        outSel.io.useConditional := outSelUseCond
+        outSel.io.conditionedIndex2 := outSelCondIdx2
         outSel.io.conditionedIndex := outSelCondIdx
-        outSel.io.useEvenCond := outSelUseEvenCond
+        outSel.io.condCode := outSelCondCode
         outSel.io.outOffset := currentOutStatement
 
 
