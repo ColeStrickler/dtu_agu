@@ -24,31 +24,12 @@ import mainargs.TokensReader.Constant
 */
 
 
-case class AGUParams
-(
-    maxOutStatements: Int = 2,
-    nLayers: Int = 5,
-    nAdd : Int = 3,
-    nMult : Int = 4,
-    nSub : Int = 2,
-    bitwidth : Int = 32,
-    nPassthru : Int = 4,
-    nLoopRegs : Int = 5,
-    nConstRegs : Int = 6,
-    nConstArray : Int = 1,
-    nConstArraySize : Int = 32,
-    regAddress : Int = 0x4000000,
-    controlBeatBytes : Int = 8,
-    maxVarOutputs : Int = 2,
-)
-
-
 
 case class LayerConfig(
   nAdd: Int,
   nMult: Int,
   nSub: Int,
-  nPassThru: Int
+  nPassThru: Int,
 ) {
     def GetTotalFuncUnits(): Int = nAdd + nMult + nSub + nPassThru
 }
@@ -171,9 +152,21 @@ class AGUTop(params : AGUParams2, config: Int = 0, maxOffsetBitWidth : Int)(impl
         val nOutStatements = RegInit(1.U(log2Ceil(params.maxOutStatements+1).W))
         val usedOutStatements = RegInit(0.U(log2Ceil(params.maxOutStatements+1).W))
         val outStatementsPerCond = RegInit(0.U(log2Ceil(params.maxOutStatements+1).W))
+        val zeroOutStatements = RegInit(VecInit(Seq.fill(params.maxOutStatements)(false.B)))
+
+
+
+
+        // maybe parameterize these later
         val outSelCondCode = RegInit(0.U(log2Ceil(6).W))
         val outSelCondIdx = RegInit(0.U(log2Ceil(params.maxOutStatements).W))
         val outSelCondIdx2 = RegInit(0.U(log2Ceil(params.maxOutStatements).W))
+
+
+        val outSel2CondCode = RegInit(0.U(log2Ceil(6).W))
+        val outSel2CondIdx = RegInit(0.U(log2Ceil(params.maxOutStatements).W))
+        val outSel2CondIdx2 = RegInit(0.U(log2Ceil(params.maxOutStatements).W))
+
         //val outSelUseEvenCond = RegInit(false.B)
         val usedForLoops = RegInit(1.U(log2Ceil(params.nLoopRegs).W))
         val config_reset = RegInit(false.B)
@@ -486,6 +479,7 @@ class AGUTop(params : AGUParams2, config: Int = 0, maxOffsetBitWidth : Int)(impl
         outSel.io.usedOutStatements := usedOutStatements
         outSel.io.outStatementsPerCond := outStatementsPerCond
         outSel.io.loopIndices := LoopRegs
+        outSel.io.loopBounds := LoopIncRegs
         outSel.io.conditionedIndex2 := outSelCondIdx2
         outSel.io.conditionedIndex := outSelCondIdx
         outSel.io.condCode := outSelCondCode
@@ -632,6 +626,7 @@ class AGUTop(params : AGUParams2, config: Int = 0, maxOffsetBitWidth : Int)(impl
 
         io.reqIO.offset.valid := validAtLayer(validAtLayer.length-1) && !stallLayers(stallLayers.length-1) 
         io.reqIO.offset.bits := dpath.io.output
+        io.reqIO.zero := zeroOutStatements(outStatementAtLayer(validAtLayer.length-1))
 
 
         /*

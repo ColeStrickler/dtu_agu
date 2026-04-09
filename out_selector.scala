@@ -13,10 +13,11 @@ class OutSelector(LoopIndexCount: Int, MaxOutStatements: Int, bitwidth: Int) ext
         val usedOutStatements = Input(UInt(log2Ceil(MaxOutStatements).W))
         val outStatementsPerCond = Input(UInt(log2Ceil(MaxOutStatements).W))
         val loopIndices = Input(Vec(LoopIndexCount, UInt(bitwidth.W)))
+        val loopBounds = Input(Vec(LoopIndexCount, UInt(bitwidth.W)))
 
         val conditionedIndex = Input(UInt(log2Ceil(LoopIndexCount).W))
         val conditionedIndex2 = Input(UInt(log2Ceil(LoopIndexCount).W))
-        val condCode = Input(UInt(log2Ceil(6).W)) // restrict to two cond
+        val condCode = Input(UInt(log2Ceil(10).W)) // restrict to two cond
         val outOffset  = Input(UInt(log2Ceil(MaxOutStatements).W))
 
         val outStatement = Output(UInt(log2Ceil(MaxOutStatements).W))
@@ -24,7 +25,7 @@ class OutSelector(LoopIndexCount: Int, MaxOutStatements: Int, bitwidth: Int) ext
 
     
     object COND extends ChiselEnum {
-        val DISABLE, ISEVEN, SWITCH, LT, GT, LTE, GTE = Value
+        val DISABLE, ISEVEN, SWITCH, LT, GT, LTE, GTE, EDGE, EDGE2OR, EDGE2AND = Value
     }
 
     def isEven(idx: UInt) : Bool = {
@@ -123,44 +124,66 @@ class OutSelector(LoopIndexCount: Int, MaxOutStatements: Int, bitwidth: Int) ext
                 io.outStatement := io.outStatementsPerCond + io.outOffset
             }
         }
+
+
+        is (COND.EDGE)
+        {
+            val bounds = io.loopBounds(io.conditionedIndex) - 1.U
+            when (conditionedIdx === 0.U || conditionedIdx === bounds)
+            {
+                io.outStatement :=  io.outOffset
+            }
+            .otherwise
+            {
+                io.outStatement := io.outStatementsPerCond + io.outOffset
+            }
+        }
+
+
+        is (COND.EDGE2OR)
+        {
+            val bounds1 = io.loopBounds(io.conditionedIndex) - 1.U
+            val bounds1_cond = conditionedIdx === 0.U || conditionedIdx === bounds1
+
+
+            val bounds2 = io.loopBounds(io.conditionedIndex2) - 1.U
+            val bounds2_cond = conditionedIdx2 === 0.U || conditionedIdx2 === bounds2
+
+
+            when (bounds1_cond || bounds2_cond)
+            {
+                io.outStatement :=  io.outOffset
+            }
+            .otherwise
+            {
+                io.outStatement := io.outStatementsPerCond + io.outOffset
+            }
+
+        }
+
+
+        is (COND.EDGE2AND)
+        {
+            val bounds1 = io.loopBounds(io.conditionedIndex) - 1.U
+            val bounds1_cond = conditionedIdx === 0.U || conditionedIdx === bounds1
+
+
+            val bounds2 = io.loopBounds(io.conditionedIndex2) - 1.U
+            val bounds2_cond = conditionedIdx2 === 0.U || conditionedIdx2 === bounds2
+
+
+            when (bounds1_cond && bounds2_cond)
+            {
+                io.outStatement :=  io.outOffset
+            }
+            .otherwise
+            {
+                io.outStatement := io.outStatementsPerCond + io.outOffset
+            }
+        }
+
+
     }
 
-    //when (!io.useConditional)
-    //{
-    //    io.outStatement := io.outOffset
-    //}
-    //.elsewhen (io.useEvenCond)
-    //{
-    //    when(isEven(conditionedIdx))
-    //    {
-    //        SynthesizePrintf("isEven! %d\n", io.outOffset)
-    //        io.outStatement :=  io.outOffset
-    //    }
-    //    .otherwise
-    //    {
-    //        io.outStatement := io.outStatementsPerCond + io.outOffset
-    //        SynthesizePrintf("NotisEven! %d\n", io.outStatementsPerCond + io.outOffset)
-    //    }
-    //}
-    //.otherwise
-    //{
-//
-    //    /*
-    //        For example
-//
-//
-    //        switch (j)
-    //        {
-    //            case 0.U:
-    //                out = 
-    //                out =
-    //            case 1.U:
-    //                out = 
-    //                out = 
-    //        }
-    //    
-    //    */
-    //    io.outStatement := (io.outStatementsPerCond * conditionedIdx) + io.outOffset
-    //}
 
 }
