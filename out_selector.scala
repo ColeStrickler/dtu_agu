@@ -185,7 +185,6 @@ class OutSelector(LoopIndexCount: Int, MaxOutStatements: Int, bitwidth: Int) ext
             }
         }
 
-
         is (COND.PAD)
         {
             val h = getCondIdx(0)
