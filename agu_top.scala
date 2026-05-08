@@ -48,7 +48,7 @@ case class AGUParams2
     ),
     nLayers: Int = 5,
     bitwidth : Int = 32,
-    nLoopRegs : Int = 5,
+    nLoopRegs : Int = 7,
     nConstRegs : Int = 6,
     nConstArray : Int = 1,
     nConstArraySize : Int = 32,
