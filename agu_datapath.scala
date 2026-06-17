@@ -35,6 +35,7 @@ class AGUDatapath(params: AGUParams2, nLoopRegs : Int, nConstRegs: Int, nLayers:
         val LoopIncRegsIn =         Input(Vec(nLoopRegs, UInt(maxOffsetBitWidth.W)))
         val ConstantRegsIn =        Input(Vec(nConstRegs, UInt(maxOffsetBitWidth.W)))
         val ConstantArrayRegIn =    Input(Vec(params.nConstArray, UInt(maxOffsetBitWidth.W)))
+        val dataDependentInjectionIn = Input(UInt(maxOffsetBitWidth.W))
     })
 
     /*
@@ -45,12 +46,13 @@ class AGUDatapath(params: AGUParams2, nLoopRegs : Int, nConstRegs: Int, nLayers:
     val ConstantRegs = Wire(Vec(nConstRegs, UInt(maxOffsetBitWidth.W)))
     val ConstantArrayRegs = Wire(Vec(params.nConstArray, UInt(maxOffsetBitWidth.W)))
     val data_size  = RegInit(4.U(6.W))
+    val DataDependentInjection = Wire(UInt(maxOffsetBitWidth.W))
     LoopRegs := io.LoopRegsIn
     LoopIncRegs := io.LoopIncRegsIn
     ConstantRegs := io.ConstantRegsIn
     ConstantArrayRegs := io.ConstantArrayRegIn
     data_size := io.data_size 
-
+    DataDependentInjection := io.dataDependentInjectionIn
     when (io.doGen)
     {
        // SynthesizePrintf("[AGUDatapath] io.doGen %d\n", io.doGen)
@@ -158,10 +160,14 @@ class AGUDatapath(params: AGUParams2, nLoopRegs : Int, nConstRegs: Int, nLayers:
         routing(0).inputs(i + nConstRegs) := ConstantArrayRegs(i)
     }
 
-
     for (i <- 0 until nLoopRegs)
     {
         routing(0).inputs(i + nConstRegs + params.nConstArray) := LoopRegs(i)
+    }
+
+    for (i <- 0 until params.nDataDependent)
+    {
+        routing(0).inputs(i+ nConstRegs + params.nConstArray + nLoopRegs) := DataDependentInjection
     }
     //assert(nLoopRegs + params.nConstArray + nConstRegs <= nUnits)
     // make sure everything is initialized
@@ -232,15 +238,16 @@ class AGUDatapath(params: AGUParams2, nLoopRegs : Int, nConstRegs: Int, nLayers:
     
 
 
-    val shift = WireInit(1.U(4.W))
-    when (data_size === 16.U) {
-        shift := 4.U
-    } .elsewhen (data_size === 8.U) {
+    val shift = WireInit(0.U(4.W))
+    when (data_size === 8.U) {
         shift := 3.U
     } .elsewhen (data_size === 4.U) {
        shift := 2.U
     }.elsewhen (data_size === 2.U)  { // 1 bit
         shift := 1.U
+    }.elsewhen (data_size === 1.U)
+    {
+        shift := 0.U
     }
 
     

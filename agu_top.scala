@@ -13,7 +13,9 @@ import midas.targetutils.SynthesizePrintf
 import org.chipsalliance.cde.config.{Parameters, Field, Config}
 import scala.collection.mutable.ArrayBuffer
 import subsystem.rme.RequestorAGUPort
+import subsystem.rme.PrefetchUnitAGUIO
 import mainargs.TokensReader.Constant
+import subsystem.rme._
 /* 
     In this module we do the following:
 
@@ -55,6 +57,8 @@ case class AGUParams2
     regAddress : Int = 0x4000000,
     controlBeatBytes : Int = 8,
     maxVarOutputs : Int = 2,
+    nDataDependent: Int  = 1,
+    rme : RelMemParams = RelMemParams()
 ) {
     require(layerCfgs.length == nLayers+1)
 
@@ -88,7 +92,7 @@ case class AGUParams2
 
     def GetRoutingInputsLayer(layer: Int): Int = {
         if (layer == 0)
-            nLoopRegs + nConstRegs + nConstArray
+            nLoopRegs + nConstRegs + nConstArray + nDataDependent
         else if (layer > nLayers)
             1
         else
@@ -137,6 +141,7 @@ class AGUTop(params : AGUParams2, config: Int = 0, maxOffsetBitWidth : Int)(impl
         //val totalFuncUnits = params.nAdd+params.nMult+params.nPassthru+params.nSub
         val io = IO(new Bundle {
             val reqIO = Flipped(new RequestorAGUPort(maxOffsetBitWidth))
+            val prefetchIO = Flipped(new PrefetchUnitAGUIO(params.rme))
             // config out to datapath
 
         })
@@ -152,9 +157,9 @@ class AGUTop(params : AGUParams2, config: Int = 0, maxOffsetBitWidth : Int)(impl
         val nOutStatements = RegInit(1.U(log2Ceil(params.maxOutStatements+1).W))
         val usedOutStatements = RegInit(0.U(log2Ceil(params.maxOutStatements+1).W))
         val outStatementsPerCond = RegInit(0.U(log2Ceil(params.maxOutStatements+1).W))
-        val zeroOutStatements = RegInit(VecInit(Seq.fill(params.maxOutStatements)(false.B)))
+       // val zeroOutStatements = RegInit(VecInit(Seq.fill(params.maxOutStatements)(false.B)))
 
-
+        val useDataDependency = RegInit(false.B)
 
 
         // maybe parameterize these later
@@ -274,11 +279,10 @@ class AGUTop(params : AGUParams2, config: Int = 0, maxOffsetBitWidth : Int)(impl
             mmregBuf += outSelCondIdxReg
         }
 
-        for (i <- 0 until zeroOutStatements.length)
-        {
-            val regZero = ((0xf05 + outSelCondIndices.length + i) -> Seq(RegField(8, zeroOutStatements(i), RegFieldDesc("zeroOutReg", "zeroOutReg"))))
-            mmregBuf += regZero
-        }
+
+        val regDataDependent = ((0xf05 + outSelCondIndices.length) -> Seq(RegField(8, useDataDependency, RegFieldDesc("useDataDependency", "useDataDependency"))))
+        mmregBuf += regDataDependent
+        
 
         
 
@@ -297,6 +301,7 @@ class AGUTop(params : AGUParams2, config: Int = 0, maxOffsetBitWidth : Int)(impl
         val LoopIncRegs =   RegInit(VecInit(Seq.fill(params.nLoopRegs)(0.U(params.bitwidth.W))))
         val ConstantRegs =  RegInit(VecInit(Seq.fill(params.nConstRegs)(0.U(params.bitwidth.W))))
         val StrideRegs =    RegInit(VecInit(Seq.fill(params.nLoopRegs)(0.U(32.W))))
+        val DataDependentReg = RegInit(0.U(maxOffsetBitWidth.W))
 
         // this will make a mux tree that will use the loop index to bring in the value
         for (i <- 0 until params.nConstArray)
@@ -337,23 +342,36 @@ class AGUTop(params : AGUParams2, config: Int = 0, maxOffsetBitWidth : Int)(impl
             unroll_unit.io.MagicNumbers(i).add_indicator :=     magic_reg_AddInidicator(i).asBool
             unroll_unit.io.MagicNumbers(i).stride :=            stride(params.nLoopRegs-1-i)
             
-        }
+        } 
+
+
 
         val datapath_active = RegInit(false.B)
-        
+        val tmpAddrReg = RegInit(0.U(io.reqIO.offsetAddrFromBase.bits.getWidth.W))
+        val tmpAddrRegValid = RegInit(false.B)
+        val pendingDatapathAddrReg = RegInit(0.U(io.reqIO.offsetAddrFromBase.bits.getWidth.W))
+        val currentDatapathAddrReg = RegInit(0.U(io.reqIO.offsetAddrFromBase.bits.getWidth.W))
+
+        tmpAddrReg := Mux(io.reqIO.offsetAddrFromBase.fire, io.reqIO.offsetAddrFromBase.bits, tmpAddrReg)
+        tmpAddrRegValid := io.reqIO.offsetAddrFromBase.fire
+        io.prefetchIO.AsyncInjectionRequest.valid := Mux(useDataDependency, tmpAddrRegValid, false.B)
+        io.prefetchIO.AsyncInjectionRequest.bits := tmpAddrReg
+        pendingDatapathAddrReg := Mux(tmpAddrRegValid, tmpAddrReg, pendingDatapathAddrReg)
+        currentDatapathAddrReg := Mux(unroll_unit.io.UnrolledInit.fire, pendingDatapathAddrReg, currentDatapathAddrReg)
+
         unroll_unit.io.DataSize := io.reqIO.data_size
         unroll_unit.io.nForLoopsActive := usedForLoops
         // Feed incoming addresses into the unroll unit
         unroll_unit.io.AddressIn.bits  := io.reqIO.offsetAddrFromBase.bits
         unroll_unit.io.AddressIn.valid := io.reqIO.offsetAddrFromBase.valid
         io.reqIO.offsetAddrFromBase.ready := unroll_unit.io.AddressIn.ready
-
-        unroll_unit.io.UnrolledInit.ready := !datapath_active
-
+        unroll_unit.io.UnrolledInit.ready := !datapath_active && Mux(useDataDependency, io.prefetchIO.Injection.valid,true.B)
 
 
 
-
+        io.prefetchIO.InjectionRequest.bits.InjectionReqNum := Mux(datapath_active, sentForGen+readyNewGen.asUInt, 0.U)
+        io.prefetchIO.InjectionRequest.bits.RequestAddr := Mux(datapath_active, currentDatapathAddrReg, pendingDatapathAddrReg)
+        io.prefetchIO.InjectionRequest.valid := Mux(datapath_active, true.B, unroll_unit.io.UnrolledInit.valid)
         /* 
             We need to write the init to the for loops registers
 
@@ -367,7 +385,7 @@ class AGUTop(params : AGUParams2, config: Int = 0, maxOffsetBitWidth : Int)(impl
             {
                 LoopRegs(params.nLoopRegs - i - 1) := unroll_unit.io.UnrolledInit.bits.RegInitValues(i)
             }
-            
+            DataDependentReg := io.prefetchIO.Injection.bits
         }
 
 
@@ -453,7 +471,7 @@ class AGUTop(params : AGUParams2, config: Int = 0, maxOffsetBitWidth : Int)(impl
 
         // if we pass in the last one for gen, we can take anbother
         datapath_active := Mux(datapath_active, !(sentForGen === (toGen-1.U) && readyNewGen), unroll_unit.io.UnrolledInit.fire)  
-        readyNewGen := datapath_active && !stallLayers(0)
+        readyNewGen := datapath_active && !stallLayers(0) && Mux(useDataDependency, io.prefetchIO.Injection.valid, true.B)
         sentForGen := Mux(datapath_active, sentForGen + readyNewGen, 0.U) // dataflow architecture should take input every time if not stalled
 
 
@@ -573,6 +591,7 @@ class AGUTop(params : AGUParams2, config: Int = 0, maxOffsetBitWidth : Int)(impl
         dpath.io.LoopRegsIn := LoopRegs
         dpath.io.ConstantArrayRegIn := constArraySelected
         dpath.io.data_size := io.reqIO.data_size
+        dpath.io.dataDependentInjectionIn := DataDependentReg
 
 
 
@@ -634,7 +653,7 @@ class AGUTop(params : AGUParams2, config: Int = 0, maxOffsetBitWidth : Int)(impl
 
         io.reqIO.offset.valid := validAtLayer(validAtLayer.length-1) && !stallLayers(stallLayers.length-1) 
         io.reqIO.offset.bits := dpath.io.output
-        io.reqIO.zero := zeroOutStatements(outStatementAtLayer(validAtLayer.length-1))
+        //io.reqIO.zero := zeroOutStatements(outStatementAtLayer(validAtLayer.length-1))
 
 
         /*

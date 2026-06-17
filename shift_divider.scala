@@ -3,7 +3,7 @@ package agu
 import chisel3._
 import chisel3.util._
 import firrtl.options.TargetDirAnnotation
-//import midas.targetutils.SynthesizePrintf
+import midas.targetutils.SynthesizePrintf
 
 
 
@@ -27,6 +27,10 @@ class ShiftDivider(bitwidth: Int) extends Module
     val isAllowedValue = allowedSizes.map(_ === io.data_size.bits).reduce(_ || _)
 
     when(io.data_size.valid) {
+        when (!(isPowerOf2 && isAllowedValue))
+        {
+            SynthesizePrintf("data_size %d\n", io.data_size.bits)
+        }
         assert(isPowerOf2 && isAllowedValue, "data_size must be one of the allowed power-of-2 values: 1,2,4,8,16,32")
     }
 
