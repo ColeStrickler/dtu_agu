@@ -218,10 +218,10 @@ class AGUDatapath(params: AGUParams2, nLoopRegs : Int, nConstRegs: Int, nLayers:
             //{
             //    assert(routing(i).outputs(j)(x) === 0.U)
             //}
-            when(PassThru(i)(j) =/= 0.U)
-            {
-                //SynthesizePrintf("PassThru(%d)(%d) %d\n", i.U, j.U, PassThru(i)(j))
-            }
+            //when(PassThru(i)(j) =/= 0.U)
+            //{
+            //    SynthesizePrintf("PassThru(%d)(%d) %d\n", i.U, j.U, PassThru(i)(j))
+            //}
             
             routing(i+1).inputs(j+params.GetLayerAddUnits(i)+params.GetLayerMultUnits(i)) := PassThru(i)(j)
 

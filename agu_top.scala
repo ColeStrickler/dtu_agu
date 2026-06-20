@@ -82,7 +82,7 @@ case class AGUParams2
     }
 
     def GetMaxFuncUnits() : Int = {
-        var ret : Int = nLoopRegs + nConstRegs + nConstArray
+        var ret : Int = nLoopRegs + nConstRegs + nConstArray + nDataDependent
         for (i <- 0 until nLayers)
         {
             ret = math.max(ret, GetTotalFuncUnitsLayer(i))
@@ -159,7 +159,7 @@ class AGUTop(params : AGUParams2, config: Int = 0, maxOffsetBitWidth : Int)(impl
         val outStatementsPerCond = RegInit(0.U(log2Ceil(params.maxOutStatements+1).W))
        // val zeroOutStatements = RegInit(VecInit(Seq.fill(params.maxOutStatements)(false.B)))
 
-        val useDataDependency = RegInit(false.B)
+        val useDataDependency = RegInit(true.B)
 
 
         // maybe parameterize these later
@@ -181,6 +181,7 @@ class AGUTop(params : AGUParams2, config: Int = 0, maxOffsetBitWidth : Int)(impl
         val constArrayIndexSelector = RegInit(VecInit(Seq.fill(params.nConstArray)(0.U(8.W))))
         val constArraySelected = WireInit(VecInit(Seq.fill(params.nConstArray)(0.U(maxOffsetBitWidth.W))))
         
+        val metadataStreamPhysAddr = RegInit(VecInit(Seq.fill(params.nDataDependent)(0.U(33.W))))
         
 
 
@@ -347,37 +348,14 @@ class AGUTop(params : AGUParams2, config: Int = 0, maxOffsetBitWidth : Int)(impl
 
 
         val datapath_active = RegInit(false.B)
-        val tmpAddrReg = RegInit(0.U(io.reqIO.offsetAddrFromBase.bits.getWidth.W))
-        val tmpAddrRegValid = RegInit(false.B)
-        val pendingDatapathAddrReg = RegInit(0.U(io.reqIO.offsetAddrFromBase.bits.getWidth.W))
-        val currentDatapathAddrReg = RegInit(0.U(io.reqIO.offsetAddrFromBase.bits.getWidth.W))
 
-        tmpAddrReg := Mux(io.reqIO.offsetAddrFromBase.fire, io.reqIO.offsetAddrFromBase.bits, tmpAddrReg)
-        tmpAddrRegValid := io.reqIO.offsetAddrFromBase.fire
-        io.prefetchIO.AsyncInjectionRequest.valid := Mux(useDataDependency, tmpAddrRegValid, false.B)
-        io.prefetchIO.AsyncInjectionRequest.bits := tmpAddrReg
-        pendingDatapathAddrReg := Mux(tmpAddrRegValid, tmpAddrReg, pendingDatapathAddrReg)
-        currentDatapathAddrReg := Mux(unroll_unit.io.UnrolledInit.fire, pendingDatapathAddrReg, currentDatapathAddrReg)
-
-        unroll_unit.io.DataSize := io.reqIO.data_size
-        unroll_unit.io.nForLoopsActive := usedForLoops
-        // Feed incoming addresses into the unroll unit
-        unroll_unit.io.AddressIn.bits  := io.reqIO.offsetAddrFromBase.bits
-        unroll_unit.io.AddressIn.valid := io.reqIO.offsetAddrFromBase.valid
-        io.reqIO.offsetAddrFromBase.ready := unroll_unit.io.AddressIn.ready
-        unroll_unit.io.UnrolledInit.ready := !datapath_active && Mux(useDataDependency, io.prefetchIO.Injection.valid,true.B)
-
-
-
-        io.prefetchIO.InjectionRequest.bits.InjectionReqNum := Mux(datapath_active, sentForGen+readyNewGen.asUInt, 0.U)
-        io.prefetchIO.InjectionRequest.bits.RequestAddr := Mux(datapath_active, currentDatapathAddrReg, pendingDatapathAddrReg)
-        io.prefetchIO.InjectionRequest.valid := Mux(datapath_active, true.B, unroll_unit.io.UnrolledInit.valid)
         /* 
             We need to write the init to the for loops registers
 
             The last index from unroll_unit.io.UnrolledInit.Reg is the first and innermost for-loop
 
         */
+
         when (unroll_unit.io.UnrolledInit.fire)
         {
             // we wire backwards
@@ -385,10 +363,15 @@ class AGUTop(params : AGUParams2, config: Int = 0, maxOffsetBitWidth : Int)(impl
             {
                 LoopRegs(params.nLoopRegs - i - 1) := unroll_unit.io.UnrolledInit.bits.RegInitValues(i)
             }
-            DataDependentReg := io.prefetchIO.Injection.bits
+            
         }
-
-
+        when (io.prefetchIO.Injection.valid)
+        {
+            SynthesizePrintf("Injection.bits 0x%x\n", io.prefetchIO.Injection.bits)
+        }
+        io.prefetchIO.config_StreamPhysRegisters := metadataStreamPhysAddr
+        io.prefetchIO.config_StreamDataSize := 0.U.asTypeOf(io.prefetchIO.config_StreamDataSize)
+        DataDependentReg := io.prefetchIO.Injection.bits
         // we will give each of these 32 bits for now
 
 
@@ -404,7 +387,8 @@ class AGUTop(params : AGUParams2, config: Int = 0, maxOffsetBitWidth : Int)(impl
         val bytesUsedConstArray = params.nConstArray*bytesPerConstArray// # array * (nregister + selector)
         val offsetMagicRegs =   alignTo8(offsetConstRegs+bytesUsedConst+bytesUsedConstArray)
         val bytesPerMagic =     16 // m(4), s(4), add_indicator(4) --> we give whole word even tho it is just bool
-        assert(offsetMagicRegs < 0xf00, "offset magic regs < 0xf00")
+        val offsetMetadataStreamRegs = bytesPerMagic*params.nLoopRegs + offsetMagicRegs
+        assert(offsetMetadataStreamRegs < 0xf00, "offset magic regs < 0xf00")
         for (i <- 0 until params.nLoopRegs) // Loop registers immediately after routing cells
         {
             mmregBuf += ((bytesUsedRouting+(i*bytesPerLoop) -> Seq(RegField(LoopRegs(i).getWidth, LoopRegs(i), RegFieldDesc("forloop", "forloop")))))
@@ -429,6 +413,11 @@ class AGUTop(params : AGUParams2, config: Int = 0, maxOffsetBitWidth : Int)(impl
             mmregBuf += (((offsetMagicRegs + i*bytesPerMagic)  -> Seq(RegField(64, magic_reg_M(i), RegFieldDesc("magic_m", "magic_m")))))
             mmregBuf += (((offsetMagicRegs + i*bytesPerMagic + 0x8)  -> Seq(RegField(32, magic_reg_S(i), RegFieldDesc("magic_s", "magic_s")))))
             mmregBuf += (((offsetMagicRegs + i*bytesPerMagic + 0xc)  -> Seq(RegField(1, magic_reg_AddInidicator(i), RegFieldDesc("magic_addIndicator", "magic_addIndicator")))))
+        }
+        val bytesPerMetadataStream = 8
+        for (i <- 0 until params.nDataDependent)
+        {
+            mmregBuf += (((offsetMetadataStreamRegs + i*bytesPerMetadataStream)  -> Seq(RegField(64, metadataStreamPhysAddr(i), RegFieldDesc("metaDataStreamPhysReg", "metaDataStreamPhysReg")))))
         }
 
 
@@ -461,6 +450,44 @@ class AGUTop(params : AGUParams2, config: Int = 0, maxOffsetBitWidth : Int)(impl
         val lastOutStmt = Wire(Bool())
         val toGen = RegInit(0.U(8.W))
         val sentForGen = RegInit(0.U(8.W))
+        val tmpAddrReg = RegInit(0.U(io.reqIO.offsetAddrFromBase.bits.getWidth.W))
+        val tmpAddrRegValid = RegInit(false.B)
+        val pendingDatapathAddrReg = RegInit(0.U(io.reqIO.offsetAddrFromBase.bits.getWidth.W))
+        val currentDatapathAddrReg = RegInit(0.U(io.reqIO.offsetAddrFromBase.bits.getWidth.W))
+
+        tmpAddrReg := Mux(io.reqIO.offsetAddrFromBase.fire, io.reqIO.offsetAddrFromBase.bits, tmpAddrReg)
+        tmpAddrRegValid := io.reqIO.offsetAddrFromBase.fire
+        
+        io.prefetchIO.AsyncInjectionRequest.valid := Mux(useDataDependency, tmpAddrRegValid, false.B)
+        when (io.prefetchIO.AsyncInjectionRequest.valid )
+        {
+            SynthesizePrintf("AGUTOP ASync 0x%x\n", io.prefetchIO.AsyncInjectionRequest.bits)
+        }
+
+        io.prefetchIO.AsyncInjectionRequest.bits := tmpAddrReg
+        pendingDatapathAddrReg := Mux(tmpAddrRegValid, tmpAddrReg, pendingDatapathAddrReg)
+        currentDatapathAddrReg := Mux(unroll_unit.io.UnrolledInit.fire, pendingDatapathAddrReg, currentDatapathAddrReg)
+
+        unroll_unit.io.DataSize := io.reqIO.data_size
+        unroll_unit.io.nForLoopsActive := usedForLoops
+        // Feed incoming addresses into the unroll unit
+        unroll_unit.io.AddressIn.bits  := io.reqIO.offsetAddrFromBase.bits
+        unroll_unit.io.AddressIn.valid := io.reqIO.offsetAddrFromBase.valid
+        io.reqIO.offsetAddrFromBase.ready := unroll_unit.io.AddressIn.ready
+        unroll_unit.io.UnrolledInit.ready := !datapath_active && Mux(useDataDependency, io.prefetchIO.Injection.valid,true.B)
+
+
+
+        io.prefetchIO.InjectionRequest.bits.InjectionReqNum := Mux(datapath_active, sentForGen+readyNewGen, 0.U)
+        io.prefetchIO.InjectionRequest.bits.RequestAddr := Mux(datapath_active, currentDatapathAddrReg, pendingDatapathAddrReg)
+        io.prefetchIO.InjectionRequest.valid := Mux(datapath_active, true.B, unroll_unit.io.UnrolledInit.valid)
+
+
+
+
+
+
+
 
         val shift_divider = Module(new ShiftDivider(8)) // save timing latency, since we only allow certain sizes
         shift_divider.io.addr_in := CacheLineSizeBytes
