@@ -182,7 +182,8 @@ class AGUTop(params : AGUParams2, config: Int = 0, maxOffsetBitWidth : Int)(impl
         val constArraySelected = WireInit(VecInit(Seq.fill(params.nConstArray)(0.U(maxOffsetBitWidth.W))))
         
         val metadataStreamPhysAddr = RegInit(VecInit(Seq.fill(params.nDataDependent)(0.U(33.W))))
-        
+        val metadataStreamIndex = RegInit(VecInit(Seq.fill(params.nDataDependent)(0.U(log2Ceil(params.nLoopRegs).W))))
+
 
 
 
@@ -419,7 +420,11 @@ class AGUTop(params : AGUParams2, config: Int = 0, maxOffsetBitWidth : Int)(impl
         {
             mmregBuf += (((offsetMetadataStreamRegs + i*bytesPerMetadataStream)  -> Seq(RegField(64, metadataStreamPhysAddr(i), RegFieldDesc("metaDataStreamPhysReg", "metaDataStreamPhysReg")))))
         }
-
+        for (i <- 0 until params.nDataDependent)
+        {
+            mmregBuf += (((offsetMetadataStreamRegs + params.nDataDependent*bytesPerMetadataStream + i)  -> Seq(RegField(8, metadataStreamIndex(i), RegFieldDesc("metaDataStreamIndex", "metaDataStreamIndex")))))
+        }
+   
 
 
 
@@ -458,13 +463,13 @@ class AGUTop(params : AGUParams2, config: Int = 0, maxOffsetBitWidth : Int)(impl
         tmpAddrReg := Mux(io.reqIO.offsetAddrFromBase.fire, io.reqIO.offsetAddrFromBase.bits, tmpAddrReg)
         tmpAddrRegValid := io.reqIO.offsetAddrFromBase.fire
         
-        io.prefetchIO.AsyncInjectionRequest.valid := Mux(useDataDependency, tmpAddrRegValid, false.B)
-        when (io.prefetchIO.AsyncInjectionRequest.valid )
-        {
-            SynthesizePrintf("AGUTOP ASync 0x%x\n", io.prefetchIO.AsyncInjectionRequest.bits)
-        }
+        //io.prefetchIO.AsyncInjectionRequest.valid := Mux(useDataDependency, tmpAddrRegValid, false.B)
+        //when (io.prefetchIO.AsyncInjectionRequest.valid )
+        //{
+        //    SynthesizePrintf("AGUTOP ASync 0x%x\n", io.prefetchIO.AsyncInjectionRequest.bits)
+        //}
+        //io.prefetchIO.AsyncInjectionRequest.bits := tmpAddrReg
 
-        io.prefetchIO.AsyncInjectionRequest.bits := tmpAddrReg
         pendingDatapathAddrReg := Mux(tmpAddrRegValid, tmpAddrReg, pendingDatapathAddrReg)
         currentDatapathAddrReg := Mux(unroll_unit.io.UnrolledInit.fire, pendingDatapathAddrReg, currentDatapathAddrReg)
 
@@ -477,9 +482,37 @@ class AGUTop(params : AGUParams2, config: Int = 0, maxOffsetBitWidth : Int)(impl
         unroll_unit.io.UnrolledInit.ready := !datapath_active && Mux(useDataDependency, io.prefetchIO.Injection.valid,true.B)
 
 
-
-        io.prefetchIO.InjectionRequest.bits.InjectionReqNum := Mux(datapath_active, sentForGen+readyNewGen, 0.U)
-        io.prefetchIO.InjectionRequest.bits.RequestAddr := Mux(datapath_active, currentDatapathAddrReg, pendingDatapathAddrReg)
+        def chunk64(addr: UInt): UInt = {
+            val chunk  = addr >> 6
+            chunk
+        }
+        val indexValue = LoopRegs(metadataStreamIndex(0))
+        val indexAddr = MuxLookup(io.reqIO.data_size, indexValue)(
+            Seq(
+                0.U ->  indexValue,
+                1.U -> (indexValue << 1),
+                2.U -> (indexValue << 2),
+                3.U -> (indexValue << 3),
+                4.U -> (indexValue << 4),
+                5.U -> (indexValue << 5)
+            )
+        )
+        val divider = Module(new ShiftDivider(6))
+        divider.io.data_size.bits := io.reqIO.data_size
+        divider.io.data_size.valid := true.B
+        val chunk = chunk64(indexAddr)
+        val intraChunkReqNum = MuxLookup(io.reqIO.data_size, 0.U(6.W))(
+        Seq(
+            32.U -> indexValue(0, 0).asUInt.pad(6),
+            16.U -> indexValue(1, 0).asUInt.pad(6),
+            8.U -> indexValue(2, 0).asUInt.pad(6),
+            4.U -> indexValue(3, 0).asUInt.pad(6),
+            2.U -> indexValue(4, 0).asUInt.pad(6),
+            1.U -> indexValue(5, 0).asUInt
+        )
+        )
+        io.prefetchIO.InjectionRequest.bits.InjectionReqNum :=  intraChunkReqNum //Mux(datapath_active, sentForGen+readyNewGen, 0.U)
+        io.prefetchIO.InjectionRequest.bits.RequestAddr := chunk //Mux(datapath_active, currentDatapathAddrReg, pendingDatapathAddrReg)
         io.prefetchIO.InjectionRequest.valid := Mux(datapath_active, true.B, unroll_unit.io.UnrolledInit.valid)
 
 
