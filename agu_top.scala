@@ -159,7 +159,7 @@ class AGUTop(params : AGUParams2, config: Int = 0, maxOffsetBitWidth : Int)(impl
         val outStatementsPerCond = RegInit(0.U(log2Ceil(params.maxOutStatements+1).W))
        // val zeroOutStatements = RegInit(VecInit(Seq.fill(params.maxOutStatements)(false.B)))
 
-        val useDataDependency = RegInit(true.B)
+        val useDataDependency = RegInit(false.B)
 
 
         // maybe parameterize these later
@@ -295,7 +295,7 @@ class AGUTop(params : AGUParams2, config: Int = 0, maxOffsetBitWidth : Int)(impl
         mmregBuf += outSelCondCodeReg
 
 
-
+  
         /*
             We need an nLoopRegs used register to use with the unroll_unit?
         */
@@ -372,7 +372,7 @@ class AGUTop(params : AGUParams2, config: Int = 0, maxOffsetBitWidth : Int)(impl
         }
         io.prefetchIO.config_StreamPhysRegisters := metadataStreamPhysAddr
         io.prefetchIO.config_StreamDataSize := 0.U.asTypeOf(io.prefetchIO.config_StreamDataSize)
-        DataDependentReg := io.prefetchIO.Injection.bits
+        DataDependentReg := Mux(io.prefetchIO.Injection.valid, io.prefetchIO.Injection.bits, DataDependentReg)
         // we will give each of these 32 bits for now
 
 
@@ -481,46 +481,60 @@ class AGUTop(params : AGUParams2, config: Int = 0, maxOffsetBitWidth : Int)(impl
         io.reqIO.offsetAddrFromBase.ready := unroll_unit.io.AddressIn.ready
         unroll_unit.io.UnrolledInit.ready := !datapath_active && Mux(useDataDependency, io.prefetchIO.Injection.valid,true.B)
 
+        when (unroll_unit.io.UnrolledInit.valid && !(!datapath_active && Mux(useDataDependency, io.prefetchIO.Injection.valid,true.B)))
+        {
+            val dependencyCondition =
+            Mux(useDataDependency, io.prefetchIO.Injection.valid, true.B)
 
-        def chunk64(addr: UInt): UInt = {
-            val chunk  = addr >> 6
-            chunk
+            val canAcceptUnrolledInit =
+            !datapath_active && dependencyCondition
+
+            val blockUnrolledInit =
+            unroll_unit.io.UnrolledInit.valid && !canAcceptUnrolledInit
         }
-        val indexValue = LoopRegs(metadataStreamIndex(0))
+
+
+        def alignChunk64(addr: UInt): UInt = {
+            val alignedChunkAddr = Cat(addr(addr.getWidth - 1, 6), 0.U(6.W))
+            alignedChunkAddr
+        }
+
+
+        val metadataLoopIdx = metadataStreamIndex(0)
+
+        val initValueIdx =
+            (params.nLoopRegs - 1).U - metadataLoopIdx
+
+
+        val indexValue = Mux(datapath_active, LoopRegs(metadataStreamIndex(0))+1.U, unroll_unit.io.UnrolledInit.bits.RegInitValues(initValueIdx))
+        
+        //val indexValue = LoopRegs(metadataStreamIndex(0))
         val indexAddr = MuxLookup(io.reqIO.data_size, indexValue)(
             Seq(
-                0.U ->  indexValue,
-                1.U -> (indexValue << 1),
-                2.U -> (indexValue << 2),
-                3.U -> (indexValue << 3),
-                4.U -> (indexValue << 4),
-                5.U -> (indexValue << 5)
+                1.U ->  indexValue,
+                2.U -> (indexValue << 1),
+                4.U -> (indexValue << 2),
+                8.U -> (indexValue << 3),
+                16.U -> (indexValue << 4),
+                32.U -> (indexValue << 5)
             )
         )
-        val divider = Module(new ShiftDivider(6))
-        divider.io.data_size.bits := io.reqIO.data_size
-        divider.io.data_size.valid := true.B
-        val chunk = chunk64(indexAddr)
+
+
+        val chunk = alignChunk64(indexAddr)
         val intraChunkReqNum = MuxLookup(io.reqIO.data_size, 0.U(6.W))(
-        Seq(
-            32.U -> indexValue(0, 0).asUInt.pad(6),
-            16.U -> indexValue(1, 0).asUInt.pad(6),
-            8.U -> indexValue(2, 0).asUInt.pad(6),
-            4.U -> indexValue(3, 0).asUInt.pad(6),
-            2.U -> indexValue(4, 0).asUInt.pad(6),
-            1.U -> indexValue(5, 0).asUInt
+            Seq(
+                1.U -> indexValue(5, 0),                 // 1-byte elements: 64 per line
+                2.U -> indexValue(4, 0).pad(6),          // 2-byte elements: 32 per line
+                4.U -> indexValue(3, 0).pad(6),          // 4-byte elements: 16 per line
+                8.U -> indexValue(2, 0).pad(6),          // 8-byte elements: 8 per line
+                16.U -> indexValue(1, 0).pad(6),          // 16-byte elements: 4 per line
+                32.U -> indexValue(0, 0).asUInt.pad(6)     // 32-byte elements: 2 per line
+            )
         )
-        )
-        io.prefetchIO.InjectionRequest.bits.InjectionReqNum :=  intraChunkReqNum //Mux(datapath_active, sentForGen+readyNewGen, 0.U)
+        io.prefetchIO.InjectionRequest.bits.InjectionReqNum :=  intraChunkReqNum //Mux(datapath_active, sentForGen+readyNewGen, 0.U) 
         io.prefetchIO.InjectionRequest.bits.RequestAddr := chunk //Mux(datapath_active, currentDatapathAddrReg, pendingDatapathAddrReg)
-        io.prefetchIO.InjectionRequest.valid := Mux(datapath_active, true.B, unroll_unit.io.UnrolledInit.valid)
-
-
-
-
-
-
-
+        io.prefetchIO.InjectionRequest.valid := Mux(datapath_active, useDataDependency, useDataDependency && unroll_unit.io.UnrolledInit.valid)
 
         val shift_divider = Module(new ShiftDivider(8)) // save timing latency, since we only allow certain sizes
         shift_divider.io.addr_in := CacheLineSizeBytes
@@ -638,6 +652,7 @@ class AGUTop(params : AGUParams2, config: Int = 0, maxOffsetBitWidth : Int)(impl
             validAtLayer.foreach(f => f := false.B)    
 
             config_reset := false.B
+            useDataDependency := false.B
         }
 
 
