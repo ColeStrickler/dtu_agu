@@ -372,7 +372,9 @@ class AGUTop(params : AGUParams2, config: Int = 0, maxOffsetBitWidth : Int)(impl
         }
         io.prefetchIO.config_StreamPhysRegisters := metadataStreamPhysAddr
         io.prefetchIO.config_StreamDataSize := 0.U.asTypeOf(io.prefetchIO.config_StreamDataSize)
-        DataDependentReg := Mux(io.prefetchIO.Injection.valid, io.prefetchIO.Injection.bits, DataDependentReg)
+
+
+
         // we will give each of these 32 bits for now
 
 
@@ -535,6 +537,17 @@ class AGUTop(params : AGUParams2, config: Int = 0, maxOffsetBitWidth : Int)(impl
         io.prefetchIO.InjectionRequest.bits.InjectionReqNum :=  intraChunkReqNum //Mux(datapath_active, sentForGen+readyNewGen, 0.U) 
         io.prefetchIO.InjectionRequest.bits.RequestAddr := chunk //Mux(datapath_active, currentDatapathAddrReg, pendingDatapathAddrReg)
         io.prefetchIO.InjectionRequest.valid := Mux(datapath_active, useDataDependency, useDataDependency && unroll_unit.io.UnrolledInit.valid)
+        val primeDataDependency =
+            !datapath_active &&
+            unroll_unit.io.UnrolledInit.fire &&
+            io.prefetchIO.Injection.valid
+
+        val advanceDataDependency =
+            readyNewGen &&
+            io.prefetchIO.Injection.valid
+
+
+        DataDependentReg := Mux(primeDataDependency||advanceDataDependency, io.prefetchIO.Injection.bits, DataDependentReg)
 
         val shift_divider = Module(new ShiftDivider(8)) // save timing latency, since we only allow certain sizes
         shift_divider.io.addr_in := CacheLineSizeBytes
