@@ -496,58 +496,7 @@ class AGUTop(params : AGUParams2, config: Int = 0, maxOffsetBitWidth : Int)(impl
         }
 
 
-        def alignChunk64(addr: UInt): UInt = {
-            val alignedChunkAddr = Cat(addr(addr.getWidth - 1, 6), 0.U(6.W))
-            alignedChunkAddr
-        }
-
-
-        val metadataLoopIdx = metadataStreamIndex(0)
-
-        val initValueIdx =
-            (params.nLoopRegs - 1).U - metadataLoopIdx
-
-
-        val indexValue = Mux(datapath_active, LoopRegs(metadataStreamIndex(0))+1.U, unroll_unit.io.UnrolledInit.bits.RegInitValues(initValueIdx))
-        
-        //val indexValue = LoopRegs(metadataStreamIndex(0))
-        val indexAddr = MuxLookup(io.reqIO.data_size, indexValue)(
-            Seq(
-                1.U ->  indexValue,
-                2.U -> (indexValue << 1),
-                4.U -> (indexValue << 2),
-                8.U -> (indexValue << 3),
-                16.U -> (indexValue << 4),
-                32.U -> (indexValue << 5)
-            )
-        )
-
-
-        val chunk = alignChunk64(indexAddr)
-        val intraChunkReqNum = MuxLookup(io.reqIO.data_size, 0.U(6.W))(
-            Seq(
-                1.U -> indexValue(5, 0),                 // 1-byte elements: 64 per line
-                2.U -> indexValue(4, 0).pad(6),          // 2-byte elements: 32 per line
-                4.U -> indexValue(3, 0).pad(6),          // 4-byte elements: 16 per line
-                8.U -> indexValue(2, 0).pad(6),          // 8-byte elements: 8 per line
-                16.U -> indexValue(1, 0).pad(6),          // 16-byte elements: 4 per line
-                32.U -> indexValue(0, 0).asUInt.pad(6)     // 32-byte elements: 2 per line
-            )
-        )
-        io.prefetchIO.InjectionRequest.bits.InjectionReqNum :=  intraChunkReqNum //Mux(datapath_active, sentForGen+readyNewGen, 0.U) 
-        io.prefetchIO.InjectionRequest.bits.RequestAddr := chunk //Mux(datapath_active, currentDatapathAddrReg, pendingDatapathAddrReg)
-        io.prefetchIO.InjectionRequest.valid := Mux(datapath_active, useDataDependency, useDataDependency && unroll_unit.io.UnrolledInit.valid)
-        val primeDataDependency =
-            !datapath_active &&
-            unroll_unit.io.UnrolledInit.fire &&
-            io.prefetchIO.Injection.valid
-
-        val advanceDataDependency =
-            readyNewGen &&
-            io.prefetchIO.Injection.valid
-
-
-        DataDependentReg := Mux(primeDataDependency||advanceDataDependency, io.prefetchIO.Injection.bits, DataDependentReg)
+      
 
         val shift_divider = Module(new ShiftDivider(8)) // save timing latency, since we only allow certain sizes
         shift_divider.io.addr_in := CacheLineSizeBytes
@@ -687,14 +636,21 @@ class AGUTop(params : AGUParams2, config: Int = 0, maxOffsetBitWidth : Int)(impl
 
         // update state registers
         val isIncLoopReg =  Seq.fill(params.nLoopRegs)(WireInit(false.B))
+        val loopRegNext = VecInit(Seq.fill(params.nLoopRegs)(WireInit(0.U(params.bitwidth.W))))
+        // Default: next value is current value.
+        for (i <- 0 until params.nLoopRegs) {
+            loopRegNext(i) := LoopRegs(i)
+        }
         isIncLoopReg(0) := readyNewGen 
         when (readyNewGen && lastOutStmt)
         {
-            LoopRegs(0) := Mux(LoopRegs(0) === LoopIncRegs(0) - 1.U, 0.U, LoopRegs(0)+1.U)
+            loopRegNext(0) := Mux(LoopRegs(0) === LoopIncRegs(0) - 1.U, 0.U, LoopRegs(0)+1.U)
+            LoopRegs(0) := loopRegNext(0)
             for (i <- 1 until params.nLoopRegs)
             {
                 isIncLoopReg(i) := isIncLoopReg(i-1) && (LoopRegs(i-1) + 1.U === LoopIncRegs(i-1))
-                LoopRegs(i) := Mux(isIncLoopReg(i), Mux(LoopRegs(i) + 1.U === LoopIncRegs(i), 0.U, LoopRegs(i)+1.U), LoopRegs(i))
+                loopRegNext(i) := Mux(isIncLoopReg(i), Mux(LoopRegs(i) + 1.U === LoopIncRegs(i), 0.U, LoopRegs(i)+1.U), LoopRegs(i))
+                LoopRegs(i) := loopRegNext(i)
             }
         }
         when (config_reset)
@@ -708,7 +664,78 @@ class AGUTop(params : AGUParams2, config: Int = 0, maxOffsetBitWidth : Int)(impl
         }
 
 
+        def alignChunk64(addr: UInt): UInt = {
+            val alignedChunkAddr = Cat(addr(addr.getWidth - 1, 6), 0.U(6.W))
+            alignedChunkAddr
+        }
 
+
+        val metadataLoopIdx = metadataStreamIndex(0)
+
+        val initValueIdx =
+            (params.nLoopRegs - 1).U - metadataLoopIdx
+
+        
+
+        val incCheck = VecInit(LoopRegs.zipWithIndex.map { case (l, i) =>
+                l + 1.U === LoopIncRegs(i)
+              })
+
+        val isFirst = metadataStreamIndex(0) === 0.U
+
+
+        val allInnerWrapped =
+        incCheck.zipWithIndex.map { case (cond, i) =>
+            // include conditions where i <= metadataStreamIndex(0)
+            Mux(i.U < metadataStreamIndex(0), cond, true.B)
+        }.reduce(_ && _)
+
+        val valIdxNext = Mux(isFirst, Mux(incCheck(0), 0.U, LoopRegs(0)+1.U), 
+            Mux(allInnerWrapped, Mux(incCheck(metadataStreamIndex(0)), 0.U, LoopRegs(metadataStreamIndex(0)+1.U)), LoopRegs(metadataStreamIndex(0))))
+
+        
+
+
+        val indexValue = Mux(datapath_active, valIdxNext, unroll_unit.io.UnrolledInit.bits.RegInitValues(initValueIdx))
+        
+        //val indexValue = LoopRegs(metadataStreamIndex(0))
+        val indexAddr = MuxLookup(io.reqIO.data_size, indexValue)(
+            Seq(
+                1.U ->  indexValue,
+                2.U -> (indexValue << 1),
+                4.U -> (indexValue << 2),
+                8.U -> (indexValue << 3),
+                16.U -> (indexValue << 4),
+                32.U -> (indexValue << 5)
+            )
+        )
+
+
+        val chunk = alignChunk64(indexAddr)
+        val intraChunkReqNum = MuxLookup(io.reqIO.data_size, 0.U(6.W))(
+            Seq(
+                1.U -> indexValue(5, 0),                 // 1-byte elements: 64 per line
+                2.U -> indexValue(4, 0).pad(6),          // 2-byte elements: 32 per line
+                4.U -> indexValue(3, 0).pad(6),          // 4-byte elements: 16 per line
+                8.U -> indexValue(2, 0).pad(6),          // 8-byte elements: 8 per line
+                16.U -> indexValue(1, 0).pad(6),          // 16-byte elements: 4 per line
+                32.U -> indexValue(0, 0).asUInt.pad(6)     // 32-byte elements: 2 per line
+            )
+        )
+        io.prefetchIO.InjectionRequest.bits.InjectionReqNum :=  intraChunkReqNum //Mux(datapath_active, sentForGen+readyNewGen, 0.U) 
+        io.prefetchIO.InjectionRequest.bits.RequestAddr := chunk //Mux(datapath_active, currentDatapathAddrReg, pendingDatapathAddrReg)
+        io.prefetchIO.InjectionRequest.valid := Mux(datapath_active, useDataDependency, useDataDependency && unroll_unit.io.UnrolledInit.valid)
+        val primeDataDependency =
+            !datapath_active &&
+            unroll_unit.io.UnrolledInit.fire &&
+            io.prefetchIO.Injection.valid
+
+        val advanceDataDependency =
+            readyNewGen &&
+            io.prefetchIO.Injection.valid
+
+
+        DataDependentReg := Mux(primeDataDependency||advanceDataDependency, io.prefetchIO.Injection.bits, DataDependentReg)
 
 
 
