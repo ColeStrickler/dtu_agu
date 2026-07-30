@@ -3,7 +3,7 @@ package agu
 import chisel3._
 import chisel3.util._
 //import firrtl.options.TargetDirAnnotation
-//import midas.targetutils.SynthesizePrintf
+import midas.targetutils.SynthesizePrintf
 
 
 case class MagicNumber(bitwidth : Int = 32) extends Bundle
@@ -41,6 +41,32 @@ class UnrollSegment32(index: Int, maxOffsetBitWidth: Int) extends Module
     val magic_stride = RegInit(0.U(io.magic.stride.getWidth.W))
 
 
+
+    /*
+        Unroll unit caching
+    */
+    val cached_res = RegInit(0.U(32.W))
+    val cached_times_stride = RegInit(0.U(32.W))
+    val is_cacheable = Wire(Bool())
+    is_cacheable := io.inValue.bits >= cached_times_stride && io.inValue.bits < (cached_times_stride + magic_stride)
+    val cached_result_div = Wire(UInt(32.W))
+    val cached_result_rem = Wire(UInt(32.W))
+    val using_cache = RegInit(false.B)
+    using_cache := Mux(io.rst, false.B, Mux(io.inValue.valid, is_cacheable, false.B))
+
+
+    when (io.inValue.valid && is_cacheable)
+    {
+        SynthesizePrintf("(UnrollSegment32->%d) using cache\n", index.U)
+    }
+
+
+    val div_times_stride = magic_res*magic_stride
+    cached_times_stride := Mux(!using_cache && vreg_2, div_times_stride, cached_times_stride)
+    cached_result_div := cached_res
+    cached_result_rem := (io.inValue.bits - cached_times_stride)
+    cached_res := Mux(vreg_2 && !using_cache, reg, cached_res)
+
     mul := io.inValue.bits * io.magic.M // cycle 0 -- 
     int_mag_res := (mul >> 32) // cycle 1 --> if this breaks timing, we can probably just slice instead of shift?
     
@@ -63,6 +89,12 @@ class UnrollSegment32(index: Int, maxOffsetBitWidth: Int) extends Module
         //SynthesizePrintf("[UnrollSegment32_%d] rst\n", index.U)
         //SynthesizePrintf("[UnrollSegment32_%d] M %d, S %d, add_indicator %d\n", index.U, io.magic.M, io.magic.s, io.magic.add_indicator)
        // SynthesizePrintf("[UnrollSegment32_%d] Reg %d, remreg %d\n", index.U, reg, remreg)
+    }.elsewhen (is_cacheable && io.inValue.valid)
+    {
+        vreg_1 := true.B
+        vreg_2 := true.B
+        reg := cached_result_div
+        remreg := cached_result_rem
     }
     .elsewhen(io.inValue.valid)
     {
@@ -74,13 +106,15 @@ class UnrollSegment32(index: Int, maxOffsetBitWidth: Int) extends Module
     }
 
 
+
+
     /* 
         We break up the multiplications into two stages
     */
-    when (vreg_1) // cycle 1
+    when (vreg_1 && !vreg_2 && !io.rst && !using_cache) // cycle 1
     {
         reg := magic_res // cycle 1
-        remreg := (inBits - (magic_res*magic_stride)) // cycle 1
+        remreg := (inBits - (div_times_stride)) // cycle 1
       //  SynthesizePrintf("vreg(%d) %d %d\n", index.U, vreg_1, vreg_2)
     }
 
@@ -99,3 +133,6 @@ class UnrollSegment32(index: Int, maxOffsetBitWidth: Int) extends Module
     io.index.bits := reg // cycle 2
     io.remainder := remreg // cycle 2
 }
+
+
+

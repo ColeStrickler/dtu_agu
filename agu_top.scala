@@ -123,7 +123,7 @@ class AGUTop(params : AGUParams2, config: Int = 0, maxOffsetBitWidth : Int)(impl
         //    (math.pow(2, bits)-1).toInt
     }
     val routerRegBitsNeeded = log2Ceil(NULL_ROUTE) + 1
-    println(s"router reg $routerRegBitsNeeded")
+   // println(s"router reg $routerRegBitsNeeded")
     def alignTo8(x: Int): Int = ((x + 7) / 8) * 8
 
     val CacheLineSizeBytes = 64.U // bytes
@@ -237,7 +237,7 @@ class AGUTop(params : AGUParams2, config: Int = 0, maxOffsetBitWidth : Int)(impl
                 )
                 })}))
                                   
-         println(s"agutop regBit $routerRegBitsNeeded")
+        // println(s"agutop regBit $routerRegBitsNeeded")
 
 
         
@@ -435,7 +435,7 @@ class AGUTop(params : AGUParams2, config: Int = 0, maxOffsetBitWidth : Int)(impl
 
         val mmreg: Seq[(Int, Seq[RegField])] = mmregBuf.toSeq
         mmregBuf.foreach { case (addr, fields) =>
-            println(f"MMIO reg @ 0x$addr%x : ${fields.map(_.desc.get.name).mkString(", ")}")
+         //   println(f"MMIO reg @ 0x$addr%x : ${fields.map(_.desc.get.name).mkString(", ")}")
         }
 
         ctlnode.regmap(mmreg: _*)
