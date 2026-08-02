@@ -19,6 +19,7 @@ case class UnrollUnitIO(params: AGUParams2, maxOffsetBitWidth: Int) extends Bund
     val nForLoopsActive = Input(UInt(log2Ceil(params.nLoopRegs).W))
     val MagicNumbers = Input(Vec(params.nLoopRegs, MagicNumber(params.bitwidth)))
     val DataSize = Input(UInt(8.W))
+    val rstGlobal = Input(Bool())
 
     val UnrolledInit = Decoupled(new UnrolledInitBundle(params, maxOffsetBitWidth))
     
@@ -75,10 +76,11 @@ class UnrollUnit(params: AGUParams2, maxOffsetBitWidth: Int) extends Module
     val UnrollSegments = VecInit(
         (0 until params.nLoopRegs).map { unitIdx =>
             val unroll_seg = Module(new UnrollSegment32(unitIdx, maxOffsetBitWidth)) 
-            unroll_seg.io
+            val uio = unroll_seg.io
+            uio
         }
     )
-
+    UnrollSegments.foreach{u => u.rstGlobal := io.rstGlobal}
 
 
 

@@ -585,8 +585,8 @@ class AGUTop(params : AGUParams2, config: Int = 0, maxOffsetBitWidth : Int)(impl
         {
             RoutingConfigOut(i) := RoutingConfig(outStatementAtLayer(i))(i)       
         }
-
-
+    
+        unroll_unit.io.rstGlobal := false.B
         when (config_reset)
         {
             //SynthesizePrintf("configReset=true\n")
@@ -604,6 +604,7 @@ class AGUTop(params : AGUParams2, config: Int = 0, maxOffsetBitWidth : Int)(impl
             LoopIncRegs.foreach(i => i := 0.U)
             ConstantRegs.foreach(i => i := 0.U)
             StrideRegs.foreach(i => i := 0.U)
+            unroll_unit.io.rstGlobal := true.B
 
 
             magic_reg_M.foreach(i => i := 0.U)

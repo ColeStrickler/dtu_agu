@@ -22,6 +22,7 @@ case class UnrollSegmentIO(bitwidth : Int = 32, maxOffsetBitWidth: Int) extends 
     val remainder = Output(UInt(maxOffsetBitWidth.W))
     val inValue = Flipped(Valid((UInt(maxOffsetBitWidth.W))))
     val rst = Input(Bool())
+    val rstGlobal = Input(Bool())
 }
 
 class UnrollSegment32(index: Int, maxOffsetBitWidth: Int) extends Module
@@ -48,12 +49,16 @@ class UnrollSegment32(index: Int, maxOffsetBitWidth: Int) extends Module
     val cached_res = RegInit(0.U(32.W))
     val cached_times_stride = RegInit(0.U(32.W))
     val is_cacheable = Wire(Bool())
-    is_cacheable := io.inValue.bits >= cached_times_stride && io.inValue.bits < (cached_times_stride + magic_stride)
+    
     val cached_result_div = Wire(UInt(32.W))
     val cached_result_rem = Wire(UInt(32.W))
     val using_cache = RegInit(false.B)
+    val cache_valid = RegInit(false.B)
     using_cache := Mux(io.rst, false.B, Mux(io.inValue.valid, is_cacheable, false.B))
 
+
+    cache_valid := Mux(io.rstGlobal, false.B, Mux(vreg_2, true.B, cache_valid))
+    is_cacheable := io.inValue.bits >= cached_times_stride && io.inValue.bits < (cached_times_stride + magic_stride) && cache_valid
 
     when (io.inValue.valid && is_cacheable)
     {
@@ -86,6 +91,7 @@ class UnrollSegment32(index: Int, maxOffsetBitWidth: Int) extends Module
         vreg_1 := false.B
         vreg_2 := false.B
         remreg := 0.U
+
         //SynthesizePrintf("[UnrollSegment32_%d] rst\n", index.U)
         //SynthesizePrintf("[UnrollSegment32_%d] M %d, S %d, add_indicator %d\n", index.U, io.magic.M, io.magic.s, io.magic.add_indicator)
        // SynthesizePrintf("[UnrollSegment32_%d] Reg %d, remreg %d\n", index.U, reg, remreg)
