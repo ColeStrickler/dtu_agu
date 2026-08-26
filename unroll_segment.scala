@@ -62,7 +62,7 @@ class UnrollSegment32(index: Int, maxOffsetBitWidth: Int) extends Module
 
     when (io.inValue.valid && is_cacheable)
     {
-        SynthesizePrintf("(UnrollSegment32->%d) using cache\n", index.U)
+        //SynthesizePrintf("(UnrollSegment32->%d) using cache\n", index.U)
     }
 
 
