@@ -587,6 +587,8 @@ class AGUTop(params : AGUParams2, config: Int = 0, maxOffsetBitWidth : Int)(impl
         }
     
         unroll_unit.io.rstGlobal := false.B
+        io.prefetchIO.rst := false.B
+
         when (config_reset)
         {
             //SynthesizePrintf("configReset=true\n")
@@ -616,6 +618,7 @@ class AGUTop(params : AGUParams2, config: Int = 0, maxOffsetBitWidth : Int)(impl
 
             config_reset := false.B
             useDataDependency := false.B
+            io.prefetchIO.rst := true.B
         }
 
 
@@ -692,7 +695,7 @@ class AGUTop(params : AGUParams2, config: Int = 0, maxOffsetBitWidth : Int)(impl
         }.reduce(_ && _)
 
         val valIdxNext = Mux(isFirst, Mux(incCheck(0), 0.U, LoopRegs(0)+1.U), 
-            Mux(allInnerWrapped, Mux(incCheck(metadataStreamIndex(0)), 0.U, LoopRegs(metadataStreamIndex(0)+1.U)), LoopRegs(metadataStreamIndex(0))))
+            Mux(allInnerWrapped, Mux(incCheck(metadataStreamIndex(0)), 0.U, LoopRegs(metadataStreamIndex(0))+1.U), LoopRegs(metadataStreamIndex(0))))
 
         
 
@@ -737,8 +740,6 @@ class AGUTop(params : AGUParams2, config: Int = 0, maxOffsetBitWidth : Int)(impl
 
 
         DataDependentReg := Mux(primeDataDependency||advanceDataDependency, io.prefetchIO.Injection.bits, DataDependentReg)
-
-
 
 
         /*
