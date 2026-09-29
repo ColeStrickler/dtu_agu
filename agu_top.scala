@@ -710,7 +710,8 @@ class AGUTop(params : AGUParams2, config: Int = 0, maxOffsetBitWidth : Int)(impl
                 4.U -> (indexValue << 2),
                 8.U -> (indexValue << 3),
                 16.U -> (indexValue << 4),
-                32.U -> (indexValue << 5)
+                32.U -> (indexValue << 5),
+                64.U -> (indexValue << 6)
             )
         )
 
@@ -723,7 +724,8 @@ class AGUTop(params : AGUParams2, config: Int = 0, maxOffsetBitWidth : Int)(impl
                 4.U -> indexValue(3, 0).pad(6),          // 4-byte elements: 16 per line
                 8.U -> indexValue(2, 0).pad(6),          // 8-byte elements: 8 per line
                 16.U -> indexValue(1, 0).pad(6),          // 16-byte elements: 4 per line
-                32.U -> indexValue(0, 0).asUInt.pad(6)     // 32-byte elements: 2 per line
+                32.U -> indexValue(0, 0).asUInt.pad(6),     // 32-byte elements: 2 per line
+                64.U -> 0.U.pad(6)     // 32-byte elements: 2 per line
             )
         )
         io.prefetchIO.InjectionRequest.bits.InjectionReqNum :=  intraChunkReqNum //Mux(datapath_active, sentForGen+readyNewGen, 0.U) 
