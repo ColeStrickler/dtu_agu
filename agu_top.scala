@@ -181,7 +181,7 @@ class AGUTop(params : AGUParams2, config: Int = 0, maxOffsetBitWidth : Int)(impl
         val constArrayIndexSelector = RegInit(VecInit(Seq.fill(params.nConstArray)(0.U(8.W))))
         val constArraySelected = WireInit(VecInit(Seq.fill(params.nConstArray)(0.U(maxOffsetBitWidth.W))))
         
-        val metadataStreamPhysAddr = RegInit(VecInit(Seq.fill(params.nDataDependent)(0.U(33.W))))
+        val metadataStreamPhysAddr = RegInit(VecInit(Seq.fill(params.nDataDependent)(0.U(47.W))))
         val metadataStreamIndex = RegInit(VecInit(Seq.fill(params.nDataDependent)(0.U(log2Ceil(params.nLoopRegs).W))))
 
 
