@@ -368,7 +368,7 @@ class AGUTop(params : AGUParams2, config: Int = 0, maxOffsetBitWidth : Int)(impl
         }
         when (io.prefetchIO.Injection.valid)
         {
-            SynthesizePrintf("Injection.bits 0x%x\n", io.prefetchIO.Injection.bits)
+//             SynthesizePrintf("Injection.bits 0x%x\n", io.prefetchIO.Injection.bits)
         }
         io.prefetchIO.config_StreamPhysRegisters := metadataStreamPhysAddr
         io.prefetchIO.config_StreamDataSize := 0.U.asTypeOf(io.prefetchIO.config_StreamDataSize)

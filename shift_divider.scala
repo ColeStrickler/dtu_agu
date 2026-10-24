@@ -29,7 +29,7 @@ class ShiftDivider(bitwidth: Int) extends Module
     when(io.data_size.valid) {
         when (!(isPowerOf2 && isAllowedValue))
         {
-            SynthesizePrintf("data_size %d\n", io.data_size.bits)
+//             SynthesizePrintf("data_size %d\n", io.data_size.bits)
         }
         assert(isPowerOf2 && isAllowedValue, "data_size must be one of the allowed power-of-2 values: 1,2,4,8,16,32")
     }
